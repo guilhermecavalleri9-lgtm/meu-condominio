@@ -4,6 +4,25 @@ App para o porteiro receber e entregar encomendas, avisando o morador no WhatsAp
 Sobe sozinho com `node server.js`, sem depender de nenhum outro sistema, e usa só o Node
 (nenhuma biblioteca para instalar).
 
+## Contas e acesso
+
+Cada pessoa da portaria tem a **sua conta** — os dados ficam todos no servidor, então
+entrar de outro navegador, de outro computador ou do celular traz tudo de volta (inclusive
+a preferência de tema).
+
+- **O primeiro cadastro do sistema vira o administrador**, já liberado (senão não existiria
+  ninguém para aprovar os outros).
+- Os demais se cadastram normalmente, mas o acesso **fica pendente até o administrador
+  aprovar**, em Ajustes → *Contas da portaria*.
+- O administrador também recusa, libera de novo, promove a administrador e exclui contas.
+  O sistema não deixa ficar sem nenhum administrador.
+- Quem bipou e quem entregou é registrado a partir da conta logada — não dá para digitar
+  outro nome.
+
+Senhas ficam guardadas só como hash `scrypt` com sal próprio. A sessão dura 30 dias num
+token assinado; recusar ou excluir uma conta derruba o acesso na hora. Cinco senhas erradas
+travam aquele usuário por 5 minutos.
+
 ## Como o porteiro usa
 
 1. **Início** — lista dos blocos cadastrados. Botão **Adicionar bloco**.
@@ -15,7 +34,8 @@ Sobe sozinho com `node server.js`, sem depender de nenhum outro sistema, e usa s
    - **entregar** ao morador com **foto** e **assinatura** na tela.
 4. **Pendentes** — tudo que está aguardando retirada, agrupado por apartamento.
 5. **Histórico** — as entregas feitas, com o comprovante (foto + assinatura).
-6. **Ajustes** — nome do condomínio, nome do porteiro e o texto das mensagens.
+6. **Ajustes** — sua conta, contas da portaria (só administrador), nome do condomínio e
+   o texto das mensagens.
 
 O botão no canto de cima alterna **modo claro / noturno**. Sem escolha feita, ele segue o
 tema do próprio aparelho; depois de escolher, a preferência fica gravada naquele aparelho.
@@ -95,7 +115,7 @@ Exemplo do padrão:
 | Variável | Para que serve |
 |---|---|
 | `PORT` | porta do servidor (padrão `3010`) |
-| `PORTARIA_PIN` | com um PIN definido, o app pede a senha antes de abrir |
+| `PORTARIA_SECRET` | chave que assina as sessões; sem ela, uma é gerada e guardada junto dos dados |
 | `DATA_DIR` | pasta dos dados no modo arquivo (padrão `dados/`) |
 | `SUPABASE_URL` + `SUPABASE_KEY` | guarda tudo no Supabase em vez do disco |
 | `SUPABASE_TABELA` | nome da tabela (padrão `portaria_kv`) |
@@ -105,6 +125,8 @@ Exemplo do padrão:
 Sem Supabase, tudo vai para arquivos JSON em `dados/` (gravação atômica: escreve
 num temporário e renomeia, para não corromper se faltar energia). Em hospedagem que apaga o
 disco a cada deploy (Render, Railway e afins), use o Supabase criando a tabela:
+
+As contas ficam na mesma tabela/pasta dos outros dados (chave `usuarios`).
 
 ```sql
 create table portaria_kv (

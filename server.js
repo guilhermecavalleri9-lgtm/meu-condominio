@@ -9,10 +9,11 @@ const path = require('path');
 const crypto = require('crypto');
 const store = require('./lib/store');
 const whats = require('./lib/whatsapp');
+const auth  = require('./lib/auth');
 
 const PORT = process.env.PORT || 3010;
-// PIN de acesso (opcional). Com ele preenchido, o app pede a senha antes de abrir.
-const PIN = String(process.env.PORTARIA_PIN || '').trim();
+// Cada pessoa da portaria tem a sua conta. Quem se cadastra fica pendente até um
+// administrador aprovar; o primeiro cadastro do sistema nasce administrador.
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const LIMITE_CORPO = 12 * 1024 * 1024; // 12 MB — foto da entrega cabe folgado
@@ -60,6 +61,44 @@ function novoId(prefixo) {
 }
 function txt(v, max) {
   return String(v === undefined || v === null ? '' : v).trim().slice(0, max || 120);
+}
+
+// ─── CONTAS ───────────────────────────────────────────────────────────────────
+// O segredo que assina os tokens fica guardado junto dos dados: assim reiniciar
+// o servidor não desloga todo mundo. Dá para fixar em PORTARIA_SECRET.
+let _segredo = null;
+async function segredo() {
+  if (_segredo) return _segredo;
+  if (process.env.PORTARIA_SECRET) { _segredo = String(process.env.PORTARIA_SECRET); return _segredo; }
+  const guardado = await store.get('segredo');
+  if (guardado && guardado.valor) { _segredo = guardado.valor; return _segredo; }
+  _segredo = crypto.randomBytes(32).toString('hex');
+  await store.set('segredo', { valor: _segredo, criadoEm: Date.now() });
+  return _segredo;
+}
+
+const lerUsuarios = async () => {
+  const d = await store.get('usuarios');
+  return (d && Array.isArray(d.usuarios)) ? d.usuarios : [];
+};
+const gravarUsuarios = lista => store.set('usuarios', { usuarios: lista, atualizadoEm: new Date().toISOString() });
+
+function ipDoPedido(req) {
+  return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+      || (req.socket && req.socket.remoteAddress) || '';
+}
+
+// quem está pedindo? token no cabeçalho (chamadas do app) ou na URL (imagens no <img>)
+async function quemEstaLogado(req, query) {
+  const cabecalho = String(req.headers['authorization'] || '');
+  const token = cabecalho.indexOf('Bearer ') === 0 ? cabecalho.slice(7)
+              : String(req.headers['x-portaria-token'] || (query && query.get('t')) || '');
+  if (!token) return null;
+  const dados = auth.lerToken(token, await segredo());
+  if (!dados) return null;
+  const usuario = (await lerUsuarios()).find(u => u.id === dados.id);
+  if (!usuario || usuario.status !== 'aprovado') return null;
+  return usuario;
 }
 
 // ─── MENSAGENS PADRÃO ─────────────────────────────────────────────────────────
@@ -205,22 +244,183 @@ async function avisarMoradores(apto, montarTexto) {
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
+// rotas que funcionam sem estar logado
+const ABERTAS = new Set(['/api/sessao', '/api/auth/registrar', '/api/auth/entrar']);
+// rotas só do administrador
+const SO_ADMIN = new Set(['/api/usuarios', '/api/usuarios/aprovar', '/api/usuarios/recusar',
+                          '/api/usuarios/papel', '/api/usuarios/remover']);
+
 async function api(req, res, pathname, query) {
-  // PIN de acesso: no cabeçalho (chamadas do app) ou na URL (imagens no <img>)
-  if (PIN && pathname !== '/api/sessao') {
-    const enviado = String(req.headers['x-portaria-pin'] || query.get('pin') || '');
-    if (enviado !== PIN) return json(res, 401, { error: 'PIN inválido' });
+  const usuarios = await lerUsuarios();
+
+  // ── porta de entrada: só passa quem está logado e aprovado ──
+  let eu = null;
+  if (!ABERTAS.has(pathname)) {
+    eu = await quemEstaLogado(req, query);
+    if (!eu) return json(res, 401, { error: 'Faça login para continuar' });
+    if (SO_ADMIN.has(pathname) && eu.papel !== 'admin')
+      return json(res, 403, { error: 'Só o administrador pode fazer isso' });
   }
 
-  // ── o app pergunta se precisa de PIN antes de mostrar a tela ──
+  // ── o app pergunta como está o sistema antes de mostrar a tela ──
   if (req.method === 'GET' && pathname === '/api/sessao') {
-    const pin = String(req.headers['x-portaria-pin'] || query.get('pin') || '');
+    const logado = await quemEstaLogado(req, query);
     return json(res, 200, {
-      precisaPin: !!PIN,
-      pinOk: !PIN || pin === PIN,
+      logado: auth.usuarioPublico(logado),
+      // sem ninguém cadastrado, o primeiro cadastro vira o administrador
+      primeiroAcesso: usuarios.length === 0,
       envioAutomatico: whats.automatico(),
       provedor: whats.automatico() ? whats.provedor : null
     });
+  }
+
+  // ── criar conta (fica pendente até o administrador aprovar) ──
+  if (req.method === 'POST' && pathname === '/api/auth/registrar') {
+    const body = await lerCorpo(req);
+    const usuario = auth.normalizarUsuario(body.usuario);
+    const nome = txt(body.nome, 60);
+    const senha = String(body.senha || '');
+    if (!auth.usuarioValido(usuario))
+      return json(res, 400, { error: 'Usuário: 3 a 24 letras, números, ponto, hífen ou _' });
+    if (!nome) return json(res, 400, { error: 'Informe o seu nome' });
+    if (senha.length < auth.MIN_SENHA)
+      return json(res, 400, { error: `A senha precisa de pelo menos ${auth.MIN_SENHA} caracteres` });
+    if (usuarios.some(u => u.usuario === usuario))
+      return json(res, 409, { error: 'Esse usuário já existe' });
+
+    const primeiro = usuarios.length === 0;
+    const novo = {
+      id: novoId('u'), usuario, nome,
+      senha: auth.hashSenha(senha),
+      papel: primeiro ? 'admin' : 'porteiro',
+      status: primeiro ? 'aprovado' : 'pendente',
+      criadoEm: Date.now(),
+      aprovadoEm: primeiro ? Date.now() : null,
+      aprovadoPor: primeiro ? 'sistema' : null,
+      ultimoAcesso: null,
+      prefs: {}
+    };
+    usuarios.push(novo);
+    await gravarUsuarios(usuarios);
+    console.log(`[contas] cadastro de "${usuario}" (${novo.status})`);
+    return json(res, 200, {
+      ok: true, primeiro,
+      status: novo.status,
+      token: primeiro ? auth.criarToken(novo, await segredo()) : null,
+      usuario: auth.usuarioPublico(novo),
+      mensagem: primeiro
+        ? 'Conta criada como administrador. Bem-vindo!'
+        : 'Cadastro enviado. Um administrador precisa aprovar antes do primeiro acesso.'
+    });
+  }
+
+  // ── entrar ──
+  if (req.method === 'POST' && pathname === '/api/auth/entrar') {
+    const body = await lerCorpo(req);
+    const usuario = auth.normalizarUsuario(body.usuario);
+    const senha = String(body.senha || '');
+    const ip = ipDoPedido(req);
+
+    const travado = auth.travadoAte(usuario, ip);
+    if (travado) {
+      const min = Math.ceil((travado - Date.now()) / 60000);
+      return json(res, 429, { error: `Muitas tentativas. Tente de novo em ${min} minuto(s).` });
+    }
+
+    const u = usuarios.find(x => x.usuario === usuario);
+    // resposta igual pra usuário inexistente e senha errada: não entrega quem existe
+    if (!u || !auth.senhaConfere(senha, u.senha)) {
+      auth.registrarErro(usuario, ip);
+      return json(res, 401, { error: 'Usuário ou senha incorretos' });
+    }
+    auth.limparErros(usuario, ip);
+    if (u.status === 'pendente')
+      return json(res, 403, { error: 'Seu cadastro ainda está esperando a aprovação do administrador.', pendente: true });
+    if (u.status !== 'aprovado')
+      return json(res, 403, { error: 'Este acesso foi recusado. Fale com o administrador.' });
+
+    u.ultimoAcesso = Date.now();
+    await gravarUsuarios(usuarios);
+    console.log(`[contas] "${usuario}" entrou`);
+    return json(res, 200, { ok: true, token: auth.criarToken(u, await segredo()), usuario: auth.usuarioPublico(u) });
+  }
+
+  // ── minha conta ──
+  if (req.method === 'GET' && pathname === '/api/auth/eu') {
+    return json(res, 200, { usuario: auth.usuarioPublico(eu) });
+  }
+
+  // ── preferências da conta (tema etc.) — seguem a pessoa em qualquer navegador ──
+  if (req.method === 'POST' && pathname === '/api/auth/prefs') {
+    const body = await lerCorpo(req);
+    const u = usuarios.find(x => x.id === eu.id);
+    u.prefs = Object.assign({}, u.prefs, {
+      tema: body.tema === 'claro' ? 'claro' : (body.tema === 'escuro' ? 'escuro' : (u.prefs || {}).tema)
+    });
+    await gravarUsuarios(usuarios);
+    return json(res, 200, { ok: true, prefs: u.prefs });
+  }
+
+  // ── trocar a própria senha ──
+  if (req.method === 'POST' && pathname === '/api/auth/senha') {
+    const body = await lerCorpo(req);
+    const u = usuarios.find(x => x.id === eu.id);
+    if (!auth.senhaConfere(String(body.atual || ''), u.senha))
+      return json(res, 401, { error: 'Senha atual incorreta' });
+    const nova = String(body.nova || '');
+    if (nova.length < auth.MIN_SENHA)
+      return json(res, 400, { error: `A senha nova precisa de pelo menos ${auth.MIN_SENHA} caracteres` });
+    u.senha = auth.hashSenha(nova);
+    await gravarUsuarios(usuarios);
+    console.log(`[contas] "${u.usuario}" trocou a senha`);
+    return json(res, 200, { ok: true });
+  }
+
+  // ── administrador: lista de contas ──
+  if (req.method === 'GET' && pathname === '/api/usuarios') {
+    return json(res, 200, { usuarios: usuarios.map(auth.usuarioPublico) });
+  }
+
+  // ── administrador: aprovar, recusar, mudar papel, remover ──
+  if (req.method === 'POST' && (pathname === '/api/usuarios/aprovar' || pathname === '/api/usuarios/recusar')) {
+    const body = await lerCorpo(req);
+    const alvo = usuarios.find(x => x.id === txt(body.id, 40));
+    if (!alvo) return json(res, 404, { error: 'Conta não encontrada' });
+    const aprovar = pathname.endsWith('aprovar');
+    alvo.status = aprovar ? 'aprovado' : 'recusado';
+    alvo.aprovadoEm = aprovar ? Date.now() : null;
+    alvo.aprovadoPor = aprovar ? eu.usuario : null;
+    await gravarUsuarios(usuarios);
+    console.log(`[contas] "${alvo.usuario}" ${aprovar ? 'aprovado' : 'recusado'} por "${eu.usuario}"`);
+    return json(res, 200, { ok: true, usuario: auth.usuarioPublico(alvo) });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/usuarios/papel') {
+    const body = await lerCorpo(req);
+    const alvo = usuarios.find(x => x.id === txt(body.id, 40));
+    if (!alvo) return json(res, 404, { error: 'Conta não encontrada' });
+    const papel = body.papel === 'admin' ? 'admin' : 'porteiro';
+    // não deixa o sistema ficar sem nenhum administrador
+    if (alvo.papel === 'admin' && papel !== 'admin' &&
+        usuarios.filter(x => x.papel === 'admin' && x.status === 'aprovado').length <= 1)
+      return json(res, 400, { error: 'Precisa sobrar pelo menos um administrador' });
+    alvo.papel = papel;
+    await gravarUsuarios(usuarios);
+    return json(res, 200, { ok: true, usuario: auth.usuarioPublico(alvo) });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/usuarios/remover') {
+    const body = await lerCorpo(req);
+    const id = txt(body.id, 40);
+    const alvo = usuarios.find(x => x.id === id);
+    if (!alvo) return json(res, 404, { error: 'Conta não encontrada' });
+    if (alvo.id === eu.id) return json(res, 400, { error: 'Você não pode excluir a sua própria conta' });
+    if (alvo.papel === 'admin' &&
+        usuarios.filter(x => x.papel === 'admin' && x.status === 'aprovado').length <= 1)
+      return json(res, 400, { error: 'Precisa sobrar pelo menos um administrador' });
+    await gravarUsuarios(usuarios.filter(x => x.id !== id));
+    console.log(`[contas] "${alvo.usuario}" removido por "${eu.usuario}"`);
+    return json(res, 200, { ok: true });
   }
 
   // ── carrega tudo que o app precisa pra abrir ──
@@ -265,7 +465,7 @@ async function api(req, res, pathname, query) {
         id: novoId('p'), codigo, blocoId, aptoId,
         bloco: bloco.nome, apto: apto.numero,
         status: 'pendente', criadoEm: agora,
-        porteiro: txt(body.porteiro, 40),
+        porteiro: eu.nome,
         avisadoEm: null, entregueEm: null, recebidoPor: '',
         fotoId: null, assinaturaId: null, obs: ''
       };
@@ -332,7 +532,7 @@ async function api(req, res, pathname, query) {
       p.status = 'entregue'; p.entregueEm = agora;
       p.recebidoPor = recebedor;
       p.recebedorId = txt(body.moradorId, 40);
-      p.porteiroEntrega = txt(body.porteiro, 40);
+      p.porteiroEntrega = eu.nome;
       p.obs = txt(body.obs, 300);
       p.fotoId = fotoId; p.assinaturaId = assinaturaId;
     }
@@ -343,7 +543,7 @@ async function api(req, res, pathname, query) {
       const cadastro = await lerCadastro();
       const { bloco, apto } = acharLocal(cadastro, alvo[0].blocoId, alvo[0].aptoId);
       enviados = await avisarMoradores(apto, m =>
-        textoEntrega(cadastro, m, bloco && bloco.nome, apto && apto.numero, alvo, recebedor, txt(body.porteiro, 40)));
+        textoEntrega(cadastro, m, bloco && bloco.nome, apto && apto.numero, alvo, recebedor, eu.nome));
     }
     console.log(`[portaria] ${alvo.length} encomenda(s) entregue(s) para ${recebedor}`);
     return json(res, 200, { ok: true, entregues: alvo.map(p => p.id), enviados, automatico: whats.automatico() });
@@ -424,5 +624,11 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🏢 Portaria na porta ${PORT}`);
   console.log(`   dados: ${store.usandoSupabase ? 'Supabase' : store.DATA_DIR}`);
   console.log(`   whatsapp: ${whats.automatico() ? 'automático (' + whats.provedor + ')' : 'manual (link wa.me)'}`);
-  console.log(`   acesso: ${PIN ? 'protegido por PIN' : 'sem PIN (só pelo link)'}`);
+  lerUsuarios().then(us => {
+    const admins = us.filter(u => u.papel === 'admin' && u.status === 'aprovado').length;
+    const pendentes = us.filter(u => u.status === 'pendente').length;
+    console.log(us.length
+      ? `   contas: ${us.length} (${admins} admin, ${pendentes} esperando aprovação)`
+      : '   contas: nenhuma ainda — o primeiro cadastro vira o administrador');
+  }).catch(() => {});
 });

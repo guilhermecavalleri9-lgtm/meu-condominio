@@ -263,16 +263,45 @@ nav button.on{color:var(--accent)}
 </head>
 <body>
 
-<!-- ════════ TELA DE PIN ════════ -->
-<div id="tela-pin" style="display:none;position:fixed;inset:0;z-index:90;background:var(--bg);padding:24px;display:none;flex-direction:column;justify-content:center;max-width:420px;margin:0 auto">
-  <div style="text-align:center;margin-bottom:22px">
-    <div style="font-size:52px">🏢</div>
-    <h1 style="font-size:22px;margin-top:8px">Portaria</h1>
-    <p style="color:var(--text3);font-size:13.5px;margin-top:4px">Digite o PIN de acesso</p>
+<!-- ════════ TELA DE ENTRAR / CRIAR CONTA ════════ -->
+<div id="tela-login" style="display:none;position:fixed;inset:0;z-index:90;background:var(--bg);overflow-y:auto;padding:24px 20px calc(24px + var(--safe-b))">
+  <div style="max-width:420px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;justify-content:center">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:48px">🏢</div>
+      <h1 style="font-size:22px;margin-top:6px">Portaria</h1>
+      <p style="color:var(--text3);font-size:13.5px;margin-top:4px" id="login-sub">Entre com a sua conta</p>
+    </div>
+
+    <div class="linha-btn" id="login-abas">
+      <button class="btn btn-p btn-a" id="aba-entrar" onclick="mostrarAba('entrar')">Entrar</button>
+      <button class="btn btn-p" id="aba-criar" onclick="mostrarAba('criar')">Criar conta</button>
+    </div>
+
+    <!-- entrar -->
+    <div id="form-entrar">
+      <label>Usuário</label>
+      <input type="text" id="lg-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex.: carlos">
+      <label>Senha</label>
+      <input type="password" id="lg-senha" autocomplete="current-password" placeholder="sua senha">
+      <button class="btn btn-a" style="margin-top:16px" id="btn-entrar" onclick="entrar()">Entrar</button>
+    </div>
+
+    <!-- criar conta -->
+    <div id="form-criar" style="display:none">
+      <label>Seu nome</label>
+      <input type="text" id="cr-nome" autocomplete="name" placeholder="ex.: Carlos Silva">
+      <label>Usuário (para entrar)</label>
+      <input type="text" id="cr-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex.: carlos">
+      <label>Senha</label>
+      <input type="password" id="cr-senha" autocomplete="new-password" placeholder="pelo menos 6 caracteres">
+      <label>Repita a senha</label>
+      <input type="password" id="cr-senha2" autocomplete="new-password" placeholder="a mesma senha">
+      <div class="ajuda" id="cr-ajuda">Depois de criar, um administrador precisa aprovar o seu acesso.</div>
+      <button class="btn btn-a" style="margin-top:14px" id="btn-criar" onclick="criarConta()">Criar conta</button>
+    </div>
+
+    <div id="login-msg" style="margin-top:14px;font-size:13.5px;text-align:center;line-height:1.5;display:none"></div>
   </div>
-  <input type="password" id="pin-campo" inputmode="numeric" placeholder="••••" style="text-align:center;font-size:24px;letter-spacing:8px">
-  <div id="pin-erro" style="color:var(--red);font-size:13px;text-align:center;margin-top:10px;display:none">PIN incorreto</div>
-  <button class="btn btn-a" style="margin-top:16px" onclick="entrarComPin()">Entrar</button>
 </div>
 
 <!-- ════════ TOPO ════════ -->
@@ -361,12 +390,27 @@ nav button.on{color:var(--accent)}
 
   <!-- ════════ AJUSTES ════════ -->
   <section class="tela" id="tela-ajustes">
+    <h2>Sua conta</h2>
+    <div class="card plano" style="align-items:flex-start">
+      <div class="ic">👤</div>
+      <div class="txt">
+        <div class="nome" id="conta-nome">…</div>
+        <div class="det" id="conta-det"></div>
+      </div>
+    </div>
+    <div class="linha-btn">
+      <button class="btn btn-p" onclick="abrirTrocarSenha()">🔑 Trocar senha</button>
+      <button class="btn btn-p btn-r" onclick="sair()">🚪 Sair</button>
+    </div>
+
+    <div id="area-contas" style="display:none">
+      <h2>Contas da portaria <span id="ct-pendentes" style="text-transform:none;letter-spacing:0;color:var(--amber);font-weight:700"></span></h2>
+      <div id="lista-contas"></div>
+    </div>
+
     <h2>Portaria</h2>
     <label>Nome do condomínio</label>
     <input type="text" id="cfg-condominio" placeholder="Residencial Primavera">
-    <label>Seu nome (porteiro do turno)</label>
-    <input type="text" id="cfg-porteiro" placeholder="Ex.: Carlos" oninput="salvarPorteiro()">
-    <div class="ajuda">Fica gravado neste aparelho e entra no registro de quem recebeu e entregou.</div>
 
     <h2>Aviso no WhatsApp</h2>
     <div class="card plano" style="align-items:flex-start">
@@ -555,6 +599,22 @@ nav button.on{color:var(--accent)}
   </div>
 </div>
 
+<!-- ════════ MODAL: TROCAR SENHA ════════ -->
+<div class="modal" id="modal-senha" onclick="fecharModal(event,'modal-senha')">
+  <div class="modal-cx" onclick="event.stopPropagation()">
+    <div class="puxador"></div>
+    <h3>Trocar senha</h3>
+    <div class="sub">Vale para entrar em qualquer aparelho.</div>
+    <label>Senha atual</label>
+    <input type="password" id="sn-atual" autocomplete="current-password">
+    <label>Senha nova</label>
+    <input type="password" id="sn-nova" autocomplete="new-password" placeholder="pelo menos 6 caracteres">
+    <label>Repita a senha nova</label>
+    <input type="password" id="sn-nova2" autocomplete="new-password">
+    <button class="btn btn-a" style="margin-top:16px" onclick="salvarSenha()">Salvar senha</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -564,8 +624,9 @@ nav button.on{color:var(--accent)}
 var dados = { cadastro: { condominio:'', blocos:[], mensagens:{}, avisoAutomatico:true, avisarNaEntrega:true },
               pacotes: [], envioAutomatico:false, provedor:null, msgPadrao:{} };
 var estado = { tela:'home', blocoId:null, aptoId:null, sel:{}, anterior:[] };
-var PIN = localStorage.getItem('portaria_pin') || '';
-var porteiro = localStorage.getItem('portaria_porteiro') || '';
+var TOKEN = localStorage.getItem('portaria_token') || '';
+var EU = null;                 // conta logada (nome, papel, preferências)
+var porteiro = '';             // nome de quem está no turno = nome da conta
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UTILIDADES
@@ -585,10 +646,12 @@ function toast(msg, tipo){
 
 function api(caminho, corpo){
   var op = { method: corpo ? 'POST' : 'GET', headers: {} };
-  if (PIN) op.headers['X-Portaria-Pin'] = PIN;
+  if (TOKEN) op.headers['Authorization'] = 'Bearer ' + TOKEN;
   if (corpo){ op.headers['Content-Type'] = 'application/json'; op.body = JSON.stringify(corpo); }
   return fetch(caminho, op).then(function(r){
     return r.json().catch(function(){ return {}; }).then(function(j){
+      // sessão caiu (expirou, acesso revogado): volta pro login sem quebrar a tela
+      if (r.status === 401 && TOKEN){ encerrarSessao('Sua sessão expirou. Entre de novo.'); throw new Error(j.error || 'sessão expirada'); }
       if (!r.ok) throw new Error(j.error || ('erro ' + r.status));
       return j;
     });
@@ -599,9 +662,11 @@ function api(caminho, corpo){
 function temaAtual(){
   return document.documentElement.getAttribute('data-tema') === 'claro' ? 'claro' : 'escuro';
 }
-function aplicarTema(tema){
+function aplicarTema(tema, semGravar){
   document.documentElement.setAttribute('data-tema', tema);
   try { localStorage.setItem('portaria_tema', tema); } catch(e) {}
+  // guarda também na conta: entrando de outro navegador, o tema vem junto
+  if (!semGravar && TOKEN && EU) api('/api/auth/prefs', { tema: tema }).catch(function(){});
   var b = $('btn-tema');
   if (b) b.textContent = tema === 'claro' ? '🌙' : '☀️';   // mostra pra onde o botão leva
   var m = document.querySelector('meta[name="theme-color"]');
@@ -609,7 +674,7 @@ function aplicarTema(tema){
 }
 function alternarTema(){ aplicarTema(temaAtual() === 'claro' ? 'escuro' : 'claro'); }
 
-function imgUrl(id){ return '/api/imagem?id=' + encodeURIComponent(id) + (PIN ? '&pin=' + encodeURIComponent(PIN) : ''); }
+function imgUrl(id){ return '/api/imagem?id=' + encodeURIComponent(id) + (TOKEN ? '&t=' + encodeURIComponent(TOKEN) : ''); }
 function novoId(p){ return p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 function telBonito(t){
@@ -1417,7 +1482,7 @@ function excluirMorador(){
 function renderAjustes(){
   var c = dados.cadastro;
   $('cfg-condominio').value = c.condominio || '';
-  $('cfg-porteiro').value = porteiro;
+  renderConta();
   $('cfg-msg1').value = c.mensagens.chegadaUm || '';
   $('cfg-msgN').value = c.mensagens.chegadaVarios || '';
   $('cfg-msgE').value = c.mensagens.entregue || '';
@@ -1439,10 +1504,6 @@ function renderAjustes(){
   $('info-versao').textContent = blocos + ' bloco(s) · ' + aptos + ' apartamento(s) · ' + mor + ' morador(es) · ' +
     dados.pacotes.length + ' encomenda(s) no sistema.';
 }
-function salvarPorteiro(){
-  porteiro = ($('cfg-porteiro').value || '').trim();
-  localStorage.setItem('portaria_porteiro', porteiro);
-}
 function toggleAuto(){
   dados.cadastro.avisoAutomatico = dados.cadastro.avisoAutomatico === false;
   $('sw-auto').classList.toggle('on', dados.cadastro.avisoAutomatico);
@@ -1460,7 +1521,6 @@ function salvarAjustes(){
     chegadaVarios: $('cfg-msgN').value,
     entregue: $('cfg-msgE').value
   };
-  salvarPorteiro();
   salvarCadastro().then(function(){
     toast('Ajustes salvos', 'ok');
     renderAjustes(); atualizarTopo();
@@ -1625,40 +1685,226 @@ function carregar(){
   });
 }
 
-function entrarComPin(){
-  var pin = ($('pin-campo').value || '').trim();
-  fetch('/api/sessao', { headers: { 'X-Portaria-Pin': pin } })
-    .then(function(r){ return r.json(); })
-    .then(function(s){
-      if (!s.pinOk){ $('pin-erro').style.display = 'block'; return; }
-      PIN = pin;
-      localStorage.setItem('portaria_pin', pin);
-      $('tela-pin').style.display = 'none';
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTRAR, CRIAR CONTA E SAIR
+// ═══════════════════════════════════════════════════════════════════════════════
+function mostrarAba(qual){
+  var entrar = qual === 'entrar';
+  $('form-entrar').style.display = entrar ? 'block' : 'none';
+  $('form-criar').style.display = entrar ? 'none' : 'block';
+  $('aba-entrar').classList.toggle('btn-a', entrar);
+  $('aba-criar').classList.toggle('btn-a', !entrar);
+  msgLogin('');
+  setTimeout(function(){ $(entrar ? 'lg-usuario' : 'cr-nome').focus(); }, 80);
+}
+function msgLogin(texto, tipo){
+  var el = $('login-msg');
+  el.style.display = texto ? 'block' : 'none';
+  el.innerHTML = texto;
+  el.style.color = tipo === 'ok' ? 'var(--green)' : (tipo === 'aviso' ? 'var(--amber)' : 'var(--red)');
+}
+
+function entrar(){
+  var usuario = ($('lg-usuario').value || '').trim();
+  var senha = $('lg-senha').value || '';
+  if (!usuario || !senha) return msgLogin('Preencha usuário e senha');
+  var btn = $('btn-entrar');
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  fetch('/api/auth/entrar', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ usuario: usuario, senha: senha })
+  }).then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
+    .then(function(res){
+      if (!res.ok){
+        msgLogin(res.j.error || 'Não consegui entrar', res.j.pendente ? 'aviso' : 'err');
+        return;
+      }
+      guardarSessao(res.j.token, res.j.usuario);
+      $('lg-senha').value = '';
+      $('tela-login').style.display = 'none';
       abrirApp();
     })
-    .catch(function(){ $('pin-erro').textContent = 'Sem conexão com o servidor'; $('pin-erro').style.display = 'block'; });
+    .catch(function(){ msgLogin('Sem conexão com o servidor'); })
+    .then(function(){ btn.disabled = false; btn.textContent = 'Entrar'; });
+}
+
+function criarConta(){
+  var nome = ($('cr-nome').value || '').trim();
+  var usuario = ($('cr-usuario').value || '').trim().toLowerCase();
+  var senha = $('cr-senha').value || '';
+  var senha2 = $('cr-senha2').value || '';
+  if (!nome) return msgLogin('Diga o seu nome');
+  if (usuario.length < 3) return msgLogin('O usuário precisa de pelo menos 3 caracteres');
+  if (senha.length < 6) return msgLogin('A senha precisa de pelo menos 6 caracteres');
+  if (senha !== senha2) return msgLogin('As duas senhas não são iguais');
+  var btn = $('btn-criar');
+  btn.disabled = true; btn.textContent = 'Criando…';
+  fetch('/api/auth/registrar', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ nome: nome, usuario: usuario, senha: senha })
+  }).then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
+    .then(function(res){
+      if (!res.ok) return msgLogin(res.j.error || 'Não consegui criar a conta');
+      if (res.j.token){                       // primeiro cadastro: já entra como administrador
+        guardarSessao(res.j.token, res.j.usuario);
+        $('tela-login').style.display = 'none';
+        abrirApp();
+        toast('Conta de administrador criada 🎉', 'ok');
+        return;
+      }
+      // demais: espera a aprovação
+      $('cr-nome').value = $('cr-usuario').value = $('cr-senha').value = $('cr-senha2').value = '';
+      mostrarAba('entrar');
+      $('lg-usuario').value = usuario;
+      msgLogin('✅ Cadastro enviado!<br>Avise o administrador da portaria: ele precisa aprovar o seu acesso antes da primeira entrada.', 'ok');
+    })
+    .catch(function(){ msgLogin('Sem conexão com o servidor'); })
+    .then(function(){ btn.disabled = false; btn.textContent = 'Criar conta'; });
+}
+
+function guardarSessao(token, usuario){
+  TOKEN = token; EU = usuario;
+  porteiro = (usuario && usuario.nome) || '';
+  try { localStorage.setItem('portaria_token', token); } catch(e) {}
+  // o tema guardado na conta manda: assim a preferência segue a pessoa
+  var tema = usuario && usuario.prefs && usuario.prefs.tema;
+  if (tema) aplicarTema(tema, true);
+}
+
+function encerrarSessao(aviso){
+  TOKEN = ''; EU = null; porteiro = '';
+  try { localStorage.removeItem('portaria_token'); } catch(e) {}
+  camParar();
+  var t = $('tela-login');
+  t.style.display = 'block';
+  mostrarAba('entrar');
+  if (aviso) msgLogin(aviso, 'aviso');
+  prepararLogin();
+}
+function sair(){
+  if (!confirm('Sair da conta neste aparelho?')) return;
+  encerrarSessao('');
+}
+
+// deixa a tela de login sabendo se ainda não existe ninguém cadastrado
+function prepararLogin(){
+  fetch('/api/sessao').then(function(r){ return r.json(); }).then(function(s){
+    if (s.primeiroAcesso){
+      $('login-sub').textContent = 'Ninguém cadastrado ainda — crie a conta do administrador';
+      $('cr-ajuda').innerHTML = '<b>Esta será a conta de administrador</b>, com acesso liberado na hora. Os próximos cadastros vão precisar da sua aprovação.';
+      mostrarAba('criar');
+    } else {
+      $('login-sub').textContent = 'Entre com a sua conta';
+      $('cr-ajuda').textContent = 'Depois de criar, um administrador precisa aprovar o seu acesso.';
+    }
+  }).catch(function(){ msgLogin('Servidor fora do ar'); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTAS (só o administrador vê)
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderConta(){
+  if (!EU) return;
+  $('conta-nome').textContent = EU.nome + (EU.papel === 'admin' ? ' · administrador' : '');
+  $('conta-det').textContent = '@' + EU.usuario + ' · entrou ' + (EU.ultimoAcesso ? quando(EU.ultimoAcesso) : 'agora');
+  $('area-contas').style.display = EU.papel === 'admin' ? 'block' : 'none';
+  if (EU.papel === 'admin') carregarContas();
+}
+
+function carregarContas(){
+  api('/api/usuarios').then(function(r){
+    var lista = (r.usuarios || []).sort(function(a, b){
+      var ordem = { pendente:0, aprovado:1, recusado:2 };
+      if (ordem[a.status] !== ordem[b.status]) return ordem[a.status] - ordem[b.status];
+      return (b.criadoEm || 0) - (a.criadoEm || 0);
+    });
+    var pendentes = lista.filter(function(u){ return u.status === 'pendente'; }).length;
+    $('ct-pendentes').textContent = pendentes ? '· ' + pendentes + ' esperando' : '';
+    $('lista-contas').innerHTML = lista.map(cartaoConta).join('');
+  }).catch(erro);
+}
+
+function cartaoConta(u){
+  var eu = EU && u.id === EU.id;
+  var selo = u.status === 'pendente' ? '<span class="tag pendente">esperando aprovação</span>'
+           : u.status === 'recusado' ? '<span class="tag" style="background:rgba(248,113,113,.14);color:var(--red)">recusado</span>'
+           : (u.papel === 'admin' ? '<span class="tag avisado">administrador</span>' : '');
+  var botoes = '';
+  if (u.status === 'pendente'){
+    botoes = '<div class="linha-btn" style="margin:10px 0 0">' +
+      '<button class="btn btn-w btn-p" onclick="decidirConta(\'' + u.id + '\',true)">✅ Aprovar</button>' +
+      '<button class="btn btn-r btn-p" onclick="decidirConta(\'' + u.id + '\',false)">✖ Recusar</button></div>';
+  } else if (!eu){
+    botoes = '<div class="linha-btn" style="margin:10px 0 0">' +
+      (u.status === 'recusado'
+        ? '<button class="btn btn-w btn-p" onclick="decidirConta(\'' + u.id + '\',true)">✅ Liberar</button>'
+        : '<button class="btn btn-p" onclick="trocarPapel(\'' + u.id + '\',\'' + (u.papel === 'admin' ? 'porteiro' : 'admin') + '\')">' +
+          (u.papel === 'admin' ? '👤 Tornar porteiro' : '⭐ Tornar admin') + '</button>') +
+      '<button class="btn btn-r btn-p" onclick="removerConta(\'' + u.id + '\')">🗑️ Excluir</button></div>';
+  }
+  return '<div class="card plano" style="display:block">' +
+    '<div style="display:flex;align-items:center;gap:12px">' +
+      '<div class="ic">' + (u.status === 'pendente' ? '🕒' : (u.papel === 'admin' ? '⭐' : '👤')) + '</div>' +
+      '<div class="txt"><div class="nome">' + esc(u.nome) + (eu ? ' (você)' : '') + ' ' + selo + '</div>' +
+      '<div class="det">@' + esc(u.usuario) + ' · cadastro ' + quando(u.criadoEm) +
+        (u.ultimoAcesso ? ' · último acesso ' + quando(u.ultimoAcesso) : '') + '</div></div>' +
+    '</div>' + botoes + '</div>';
+}
+
+function decidirConta(id, aprovar){
+  api(aprovar ? '/api/usuarios/aprovar' : '/api/usuarios/recusar', { id: id }).then(function(r){
+    toast(aprovar ? 'Acesso liberado para ' + r.usuario.nome : 'Acesso recusado', aprovar ? 'ok' : '');
+    carregarContas();
+  }).catch(erro);
+}
+function trocarPapel(id, papel){
+  api('/api/usuarios/papel', { id: id, papel: papel }).then(function(){
+    toast(papel === 'admin' ? 'Agora é administrador' : 'Agora é porteiro', 'ok');
+    carregarContas();
+  }).catch(erro);
+}
+function removerConta(id){
+  if (!confirm('Excluir esta conta? A pessoa perde o acesso na hora.')) return;
+  api('/api/usuarios/remover', { id: id }).then(function(){
+    toast('Conta excluída'); carregarContas();
+  }).catch(erro);
+}
+
+function abrirTrocarSenha(){
+  $('sn-atual').value = $('sn-nova').value = $('sn-nova2').value = '';
+  abrirModal('modal-senha');
+}
+function salvarSenha(){
+  var atual = $('sn-atual').value || '', nova = $('sn-nova').value || '';
+  if (nova.length < 6) return toast('A senha nova precisa de 6 caracteres', 'err');
+  if (nova !== ($('sn-nova2').value || '')) return toast('As duas senhas novas não são iguais', 'err');
+  api('/api/auth/senha', { atual: atual, nova: nova }).then(function(){
+    fecharModalId('modal-senha');
+    toast('Senha trocada ✅', 'ok');
+  }).catch(erro);
 }
 
 function abrirApp(){
   carregar().then(function(){
+    renderConta();
     // atalho do app instalado (?tela=pendentes) abre direto na lista
     var alvo = new URLSearchParams(location.search).get('tela');
     irPara((alvo === 'pendentes' || alvo === 'historico') ? alvo : 'home', true);
-    if (!porteiro) setTimeout(function(){ toast('Coloque seu nome em Ajustes'); }, 900);
   }).catch(erro);
 }
 
 function iniciar(){
-  var op = PIN ? { headers: { 'X-Portaria-Pin': PIN } } : {};
+  var op = TOKEN ? { headers: { Authorization: 'Bearer ' + TOKEN } } : {};
   fetch('/api/sessao', op).then(function(r){ return r.json(); }).then(function(s){
-    if (s.precisaPin && !s.pinOk){
-      var t = $('tela-pin');
-      t.style.display = 'flex';
-      $('pin-campo').focus();
-      $('pin-campo').addEventListener('keydown', function(e){ if (e.key === 'Enter') entrarComPin(); });
+    if (s.logado){
+      guardarSessao(TOKEN, s.logado);
+      abrirApp();
       return;
     }
-    abrirApp();
+    TOKEN = '';
+    try { localStorage.removeItem('portaria_token'); } catch(e) {}
+    $('tela-login').style.display = 'block';
+    prepararLogin();
   }).catch(function(){ toast('Servidor fora do ar', 'err'); });
 }
 
@@ -1681,8 +1927,15 @@ document.addEventListener('visibilitychange', function(){
 });
 window.addEventListener('beforeunload', camParar);
 
-aplicarTema(temaAtual());
+aplicarTema(temaAtual(), true);
 atualizarInstalar();
+// Enter envia direto, sem precisar procurar o botão
+['lg-usuario','lg-senha'].forEach(function(id){
+  $(id).addEventListener('keydown', function(e){ if (e.key === 'Enter') entrar(); });
+});
+['cr-nome','cr-usuario','cr-senha','cr-senha2'].forEach(function(id){
+  $(id).addEventListener('keydown', function(e){ if (e.key === 'Enter') criarConta(); });
+});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function(){});
 iniciar();
 </script>
