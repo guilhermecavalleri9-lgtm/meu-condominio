@@ -4,6 +4,7 @@
 // App independente: sobe sozinho com `node server.js` e não depende de nenhum
 // outro sistema. Node puro, sem bibliotecas externas.
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -582,7 +583,7 @@ async function api(req, res, pathname, query) {
 }
 
 // ─── SERVIDOR ─────────────────────────────────────────────────────────────────
-const server = http.createServer(async (req, res) => {
+async function atender(req, res) {
   const u = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
   const pathname = decodeURIComponent(u.pathname);
 
@@ -618,12 +619,25 @@ const server = http.createServer(async (req, res) => {
   }
 
   res.writeHead(404); res.end('Not found');
-});
+}
+
+// ─── HTTPS ────────────────────────────────────────────────────────────────────
+// Com TLS_CERT e TLS_KEY o próprio servidor fala https (certificado próprio ou
+// Let's Encrypt). Atrás de um proxy que já cuida do TLS (Cloudflare, Render,
+// nginx), deixe sem: o proxy entrega https pro celular e conversa em http aqui.
+const TLS_CERT = process.env.TLS_CERT || '';
+const TLS_KEY  = process.env.TLS_KEY  || '';
+const usandoTLS = !!(TLS_CERT && TLS_KEY);
+
+const server = usandoTLS
+  ? https.createServer({ cert: fs.readFileSync(TLS_CERT), key: fs.readFileSync(TLS_KEY) }, atender)
+  : http.createServer(atender);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🏢 Portaria na porta ${PORT}`);
+  console.log(`🏢 Meu Condomínio na porta ${PORT} (${usandoTLS ? 'https' : 'http'})`);
   console.log(`   dados: ${store.usandoSupabase ? 'Supabase' : store.DATA_DIR}`);
   console.log(`   whatsapp: ${whats.automatico() ? 'automático (' + whats.provedor + ')' : 'manual (link wa.me)'}`);
+  if (!usandoTLS) console.log('   ⚠ sem https: senha e foto trafegam abertas fora de localhost — veja o README');
   lerUsuarios().then(us => {
     const admins = us.filter(u => u.papel === 'admin' && u.status === 'aprovado').length;
     const pendentes = us.filter(u => u.status === 'pendente').length;

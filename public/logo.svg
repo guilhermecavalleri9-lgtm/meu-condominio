@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="26 31 275 203" width="275" height="203" role="img" aria-label="Meu Condomínio">
+  <!-- M azul: aparece entre o telhado e o C -->
+  <path d="M136 198 L136 100 L166 140 L196 100 L196 198"
+        fill="none" stroke="#5b7fb8" stroke-width="19" stroke-linejoin="miter"/>
+  <!-- C coral -->
+  <path d="M266 116 A53 53 0 1 0 266 190"
+        fill="none" stroke="#ec7f66" stroke-width="29" stroke-linecap="butt"/>
+  <!-- telhado e parede, por cima -->
+  <path d="M42 150 L150 47 L258 150" fill="none" stroke="#3c3c3c" stroke-width="21" stroke-linejoin="miter"/>
+  <path d="M75 121 L75 212 L107 212" fill="none" stroke="#3c3c3c" stroke-width="21" stroke-linejoin="miter"/>
+  <!-- caixa de encomenda, na frente -->
+  <g>
+    <polygon points="134,166 163,182 134,198 105,182" fill="#f5a894"/>
+    <polygon points="105,182 134,198 134,229 105,213" fill="#ec7f66"/>
+    <polygon points="163,182 134,198 134,229 163,213" fill="#d86c54"/>
+    <path d="M119.5 174 L148.5 190" stroke="#e08d76" stroke-width="2.5"/>
+    <path d="M134 198 L134 229" stroke="#c96148" stroke-width="2.5"/>
+  </g>
+</svg>

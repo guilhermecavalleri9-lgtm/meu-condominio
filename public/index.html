@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#0f1117">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Portaria">
+<meta name="apple-mobile-web-app-title" content="Meu Condomínio">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="icon" href="/icon-192.png">
-<title>Portaria · Encomendas</title>
+<title>Meu Condomínio · Encomendas</title>
 <script>
 // roda antes do CSS pintar: evita a tela dar um flash escuro em quem usa o modo claro
 (function(){
@@ -245,6 +245,13 @@ nav button.on{color:var(--accent)}
 }
 .passo span{font-size:13.5px;color:var(--text2);line-height:1.5;padding-top:3px}
 .passo span b{color:var(--text);font-weight:700}   /* destaque dentro da frase */
+.logo{width:172px;max-width:62vw;height:auto;display:block;margin:0 auto}
+.logo .telhado{stroke:var(--text)}        /* o telhado acompanha o tema */
+.marca{
+  font-size:26px;font-weight:300;letter-spacing:.5px;margin-top:2px;
+  font-family:'Century Gothic',Futura,'Avenir Next','Trebuchet MS',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color:var(--text)
+}
 .vazio{text-align:center;color:var(--text3);padding:36px 16px;font-size:14px;line-height:1.6}
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + var(--safe-b));z-index:70;
@@ -266,10 +273,22 @@ nav button.on{color:var(--accent)}
 <!-- ════════ TELA DE ENTRAR / CRIAR CONTA ════════ -->
 <div id="tela-login" style="display:none;position:fixed;inset:0;z-index:90;background:var(--bg);overflow-y:auto;padding:24px 20px calc(24px + var(--safe-b))">
   <div style="max-width:420px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;justify-content:center">
-    <div style="text-align:center;margin-bottom:20px">
-      <div style="font-size:48px">🏢</div>
-      <h1 style="font-size:22px;margin-top:6px">Portaria</h1>
-      <p style="color:var(--text3);font-size:13.5px;margin-top:4px" id="login-sub">Entre com a sua conta</p>
+    <div style="text-align:center;margin-bottom:22px">
+      <svg class="logo" viewBox="26 31 275 203" role="img" aria-label="Meu Condomínio">
+        <path d="M136 198 L136 100 L166 140 L196 100 L196 198"
+              fill="none" stroke="#5b7fb8" stroke-width="19" stroke-linejoin="miter"/>
+        <path d="M266 116 A53 53 0 1 0 266 190"
+              fill="none" stroke="#ec7f66" stroke-width="29"/>
+        <path class="telhado" d="M42 150 L150 47 L258 150" fill="none" stroke-width="21" stroke-linejoin="miter"/>
+        <path class="telhado" d="M75 121 L75 212 L107 212" fill="none" stroke-width="21" stroke-linejoin="miter"/>
+        <polygon points="134,166 163,182 134,198 105,182" fill="#f5a894"/>
+        <polygon points="105,182 134,198 134,229 105,213" fill="#ec7f66"/>
+        <polygon points="163,182 134,198 134,229 163,213" fill="#d86c54"/>
+        <path d="M119.5 174 L148.5 190" stroke="#e08d76" stroke-width="2.5"/>
+        <path d="M134 198 L134 229" stroke="#c96148" stroke-width="2.5"/>
+      </svg>
+      <h1 class="marca">Meu Condomínio</h1>
+      <p style="color:var(--text3);font-size:13.5px;margin-top:6px" id="login-sub">Entre com a sua conta</p>
     </div>
 
     <div class="linha-btn" id="login-abas">
@@ -308,7 +327,7 @@ nav button.on{color:var(--accent)}
 <header class="topo">
   <button class="voltar" id="btn-voltar" onclick="voltar()" style="display:none">←</button>
   <div style="flex:1;min-width:0">
-    <h1 id="topo-titulo">Portaria</h1>
+    <h1 id="topo-titulo">Meu Condomínio</h1>
     <div class="sub" id="topo-sub">Encomendas do condomínio</div>
   </div>
   <span class="pill" id="pill-wa">…</span>
@@ -760,7 +779,7 @@ function abrirBlocoTela(id){ estado.blocoId = id; estado.aptoId = null; $('busca
 function abrirAptoTela(id){ estado.aptoId = id; estado.sel = {}; irPara('apto'); }
 
 function atualizarTopo(){
-  var t = dados.cadastro.condominio || 'Portaria', s = 'Encomendas do condomínio';
+  var t = dados.cadastro.condominio || 'Meu Condomínio', s = 'Encomendas do condomínio';
   var b = blocoAtual(), a = aptoAtual();
   if (estado.tela === 'bloco' && b){ t = b.nome; s = (b.apartamentos||[]).length + ' apartamento(s)'; }
   if (estado.tela === 'apto' && a){ t = 'Apto ' + a.numero; s = (b ? b.nome + ' · ' : '') + ((a.moradores||[]).length) + ' morador(es)'; }
@@ -1652,7 +1671,7 @@ function mostrarComoInstalar(){
     return '<div class="passo"><b class="n">' + (i+1) + '</b><span>' + t + '</span></div>';
   }).join('');
   $('mi-ajuda').innerHTML = seguro
-    ? 'Depois de instalado, o app abre em tela cheia e continua conversando com o servidor da portaria normalmente.'
+    ? 'Depois de instalado, o app abre em tela cheia e continua conversando com o servidor normalmente.'
     : '⚠️ Este endereço está em <b>http</b> comum. Os navegadores só deixam instalar (e só liberam a câmera) em <b>https</b> ou em <b>localhost</b>. Publique o app com https para poder instalar no celular.';
   abrirModal('modal-instalar');
 }

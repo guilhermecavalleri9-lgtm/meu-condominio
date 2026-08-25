@@ -1,0 +1,33 @@
+# Publica o app no Render com https automático.
+# No painel: New → Blueprint → aponte para este repositório.
+services:
+  - type: web
+    name: meu-condominio
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: ""            # não há dependências para instalar
+    startCommand: node server.js
+    healthCheckPath: /api/sessao
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # assina as sessões; o Render gera um valor aleatório e guarda
+      - key: PORTARIA_SECRET
+        generateValue: true
+      # ── dados ──────────────────────────────────────────────────────────────
+      # O disco do plano free é apagado a cada deploy: use o Supabase para não
+      # perder cadastro, encomendas e contas. Preencha no painel do Render.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      # ── WhatsApp automático (opcional) ─────────────────────────────────────
+      - key: WHATSAPP_PROVIDER
+        sync: false
+      - key: ZAPI_INSTANCE
+        sync: false
+      - key: ZAPI_TOKEN
+        sync: false
+      - key: ZAPI_CLIENT_TOKEN
+        sync: false

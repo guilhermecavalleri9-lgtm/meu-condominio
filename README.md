@@ -1,4 +1,4 @@
-# 🏢 Portaria · encomendas do condomínio
+# 🏠 Meu Condomínio · encomendas da portaria
 
 App para o porteiro receber e entregar encomendas, avisando o morador no WhatsApp.
 Sobe sozinho com `node server.js`, sem depender de nenhum outro sistema, e usa só o Node
@@ -42,6 +42,45 @@ tema do próprio aparelho; depois de escolher, a preferência fica gravada naque
 
 Cada apartamento pode ter **vários moradores, cada um com o seu WhatsApp**, e uma
 chavinha por morador diz quem recebe ou não o aviso.
+
+## Publicar com https (recomendado)
+
+Sem `https`, o navegador **não deixa instalar o app, não libera a câmera** e a senha do
+porteiro trafega aberta na rede. Em `localhost` tudo funciona; para o celular do porteiro,
+escolha um destes caminhos:
+
+**1. Túnel do Cloudflare — o mais rápido, de graça, sem abrir porta no roteador**
+
+Rode o app normalmente (`node server.js`) e, ao lado:
+
+```bash
+cloudflared tunnel --url http://localhost:3010
+```
+
+Ele imprime um endereço `https://algo-aleatorio.trycloudflare.com` que já funciona no
+celular, com certificado válido. Bom para testar hoje mesmo; o endereço muda a cada vez.
+Com uma conta gratuita da Cloudflare e um domínio, o túnel ganha endereço fixo.
+
+**2. Hospedagem com https automático (endereço fixo)**
+
+Já vão no repositório o `Dockerfile` e o `render.yaml`. No Render: *New → Blueprint* →
+aponte para este repositório. Vale o mesmo para Railway, Fly.io ou qualquer host de
+container.
+
+Nessas hospedagens o disco é apagado a cada deploy: configure `SUPABASE_URL` e
+`SUPABASE_KEY` (veja *Onde ficam os dados*), senão cadastro, encomendas e contas se perdem.
+
+**3. Certificado próprio (rede interna do condomínio)**
+
+Com um certificado em mãos, o próprio app fala https:
+
+```bash
+TLS_CERT=/caminho/cert.pem TLS_KEY=/caminho/chave.pem node server.js
+```
+
+Para a rede local, o [mkcert](https://github.com/FiloSottile/mkcert) gera um certificado
+confiável nos aparelhos onde a autoridade dele for instalada. Certificado autoassinado
+comum não serve: o navegador reclama e continua sem instalar o app nem liberar a câmera.
 
 ## Instalar como app no celular
 
@@ -116,6 +155,7 @@ Exemplo do padrão:
 |---|---|
 | `PORT` | porta do servidor (padrão `3010`) |
 | `PORTARIA_SECRET` | chave que assina as sessões; sem ela, uma é gerada e guardada junto dos dados |
+| `TLS_CERT` + `TLS_KEY` | caminhos do certificado e da chave; com os dois, o app fala https direto |
 | `DATA_DIR` | pasta dos dados no modo arquivo (padrão `dados/`) |
 | `SUPABASE_URL` + `SUPABASE_KEY` | guarda tudo no Supabase em vez do disco |
 | `SUPABASE_TABELA` | nome da tabela (padrão `portaria_kv`) |
@@ -140,7 +180,11 @@ Fotos e assinaturas ficam em chaves separadas das listas, então carregar a tela
 encomendas não puxa imagem nenhuma. Entregas com mais de 120 dias saem do histórico
 automaticamente, junto com as suas imagens.
 
-## Ícones
+## Logo e ícones
 
-`npm run icones` regera os PNGs do PWA (`tools/gerar-icones.js` desenha e codifica o PNG
-na mão, sem biblioteca).
+A marca fica em `public/logo.svg` (telhado + M + C + encomenda). Na tela de login ela é
+desenhada em SVG, então o telhado acompanha o tema claro ou escuro.
+
+`npm run icones` regera os PNGs do app a partir desse SVG. É uma ferramenta de
+desenvolvimento e usa o Chromium do Playwright só para rasterizar; os PNGs já vão
+versionados, então o app roda sem isso instalado.
