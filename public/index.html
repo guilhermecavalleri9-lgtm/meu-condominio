@@ -6,19 +6,46 @@
 <meta name="theme-color" content="#0f1117">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Portaria">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="icon" href="/icon-192.png">
 <title>Portaria · Encomendas</title>
+<script>
+// roda antes do CSS pintar: evita a tela dar um flash escuro em quem usa o modo claro
+(function(){
+  try {
+    var t = localStorage.getItem('portaria_tema');
+    if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'claro' : 'escuro';
+    document.documentElement.setAttribute('data-tema', t);
+  } catch(e) {}
+})();
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
   --bg:#0f1117;--bg2:#171a24;--bg3:#212536;--linha:#2a2f45;
   --text:#e8eaf0;--text2:#9ba3c0;--text3:#5b6480;
   --accent:#6c8ef5;--accent2:#8aa5ff;--green:#25d366;--green2:#1ea952;
-  --red:#f87171;--amber:#fbbf24;--r:14px;
+  --red:#f87171;--amber:#fbbf24;--r:14px;--txt-verde:#08240f;
   --safe-b:env(safe-area-inset-bottom,0px);
+}
+/* modo claro: as mesmas variáveis, com os papéis invertidos. O botão no topo
+   grava a escolha; sem escolha gravada, segue o tema do celular/computador. */
+:root[data-tema="claro"]{
+  --bg:#f2f5fb;--bg2:#ffffff;--bg3:#e9edf7;--linha:#d9e0ee;
+  --text:#141824;--text2:#4b5470;--text3:#7d869f;
+  --accent:#3a5fd0;--accent2:#2f51bb;--green:#12a150;--green2:#0d8442;
+  --red:#d24343;--amber:#a86b12;--txt-verde:#ffffff;
+}
+@media(prefers-color-scheme:light){
+  :root:not([data-tema="escuro"]){
+    --bg:#f2f5fb;--bg2:#ffffff;--bg3:#e9edf7;--linha:#d9e0ee;
+    --text:#141824;--text2:#4b5470;--text3:#7d869f;
+    --accent:#3a5fd0;--accent2:#2f51bb;--green:#12a150;--green2:#0d8442;
+    --red:#d24343;--amber:#a86b12;--txt-verde:#ffffff;
+  }
 }
 html,body{height:100%}
 body{
@@ -41,6 +68,12 @@ input,select,textarea,button{font-family:inherit;font-size:16px;color:inherit}
   font-size:18px;cursor:pointer;flex-shrink:0
 }
 .pill{font-size:11px;padding:3px 9px;border-radius:20px;background:var(--bg3);color:var(--text2);white-space:nowrap}
+.tema{
+  background:var(--bg3);border:1px solid var(--linha);border-radius:9px;
+  width:32px;height:32px;font-size:15px;line-height:1;cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center
+}
+.tema:active{filter:brightness(1.2)}
 .pill.on{background:rgba(37,211,102,.15);color:var(--green)}
 .pill.off{background:rgba(251,191,36,.14);color:var(--amber)}
 
@@ -98,7 +131,7 @@ h2:first-child{margin-top:2px}
 .btn:active{filter:brightness(1.25)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn-a{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn-w{background:var(--green);border-color:var(--green);color:#08240f}
+.btn-w{background:var(--green);border-color:var(--green);color:var(--txt-verde)}
 .btn-r{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.35);color:var(--red)}
 .btn-p{padding:10px 12px;font-size:13.5px;border-radius:10px}
 .linha-btn{display:flex;gap:9px;margin-bottom:10px}
@@ -178,7 +211,7 @@ textarea{min-height:118px;resize:vertical;font-size:14px;line-height:1.5}
 .modal .sub{font-size:12.5px;color:var(--text3);margin-bottom:12px}
 
 /* assinatura e foto */
-.assina{background:#fff;border-radius:12px;width:100%;height:190px;touch-action:none;display:block}
+.assina{background:#fff;border:1px solid var(--linha);border-radius:12px;width:100%;height:190px;touch-action:none;display:block}
 .foto-prev{width:100%;max-height:230px;object-fit:contain;border-radius:12px;background:#000;margin-top:8px;display:none}
 .mini{width:52px;height:52px;border-radius:9px;object-fit:cover;background:#000;border:1px solid var(--linha);cursor:pointer}
 
@@ -194,6 +227,24 @@ nav button{
 nav button b{font-size:20px;font-weight:400;line-height:1}
 nav button.on{color:var(--accent)}
 
+.instalar{
+  display:none;align-items:center;gap:12px;margin-bottom:12px;
+  background:linear-gradient(135deg,rgba(108,142,245,.16),rgba(108,142,245,.05));
+  border:1px solid var(--accent);border-radius:var(--r);padding:12px 14px
+}
+.instalar.ver{display:flex}
+.instalar .txt{flex:1;min-width:0}
+.instalar .nome{font-weight:700;font-size:14.5px}
+.instalar .det{font-size:12px;color:var(--text2);margin-top:2px}
+.instalar .fechar{background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:4px}
+.passo{display:flex;gap:11px;align-items:flex-start;margin-bottom:11px}
+.passo b.n{
+  background:var(--bg3);border:1px solid var(--linha);border-radius:8px;
+  min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;flex-shrink:0
+}
+.passo span{font-size:13.5px;color:var(--text2);line-height:1.5;padding-top:3px}
+.passo span b{color:var(--text);font-weight:700}   /* destaque dentro da frase */
 .vazio{text-align:center;color:var(--text3);padding:36px 16px;font-size:14px;line-height:1.6}
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + var(--safe-b));z-index:70;
@@ -232,12 +283,22 @@ nav button.on{color:var(--accent)}
     <div class="sub" id="topo-sub">Encomendas do condomínio</div>
   </div>
   <span class="pill" id="pill-wa">…</span>
+  <button class="tema" id="btn-tema" onclick="alternarTema()" title="Modo claro / noturno" aria-label="Alternar modo claro e noturno">🌙</button>
 </header>
 
 <main>
 
   <!-- ════════ INÍCIO: BLOCOS ════════ -->
   <section class="tela ativa" id="tela-home">
+    <div class="instalar" id="faixa-instalar">
+      <div class="ic" style="width:38px;height:38px;border-radius:10px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:19px">📲</div>
+      <div class="txt">
+        <div class="nome">Instalar na tela inicial</div>
+        <div class="det">Abre em tela cheia, igual a um aplicativo</div>
+      </div>
+      <button class="btn btn-a btn-p" style="width:auto;padding:9px 14px" onclick="instalarApp()">Instalar</button>
+      <button class="fechar" onclick="dispensarInstalar()" aria-label="Agora não">✕</button>
+    </div>
     <div class="linha-btn">
       <button class="btn btn-a btn-p" onclick="abrirBloco()">➕ Adicionar bloco</button>
       <button class="btn btn-p" onclick="irPara('pendentes')">📦 Pendentes <span id="ct-pend2" class="contagem"></span></button>
@@ -341,6 +402,16 @@ nav button.on{color:var(--accent)}
       <button class="btn btn-p" onclick="restaurarMensagens()">↩︎ Restaurar padrão</button>
       <button class="btn btn-a btn-p" onclick="salvarAjustes()">💾 Salvar</button>
     </div>
+
+    <h2>Aplicativo no celular</h2>
+    <div class="card plano" style="align-items:flex-start">
+      <div class="ic" id="app-ic">📲</div>
+      <div class="txt">
+        <div class="nome" id="app-titulo">Instalar na tela inicial</div>
+        <div class="det" id="app-detalhe" style="white-space:normal">Fica com ícone próprio e abre em tela cheia, sem a barra do navegador.</div>
+      </div>
+    </div>
+    <button class="btn btn-a btn-p" id="btn-instalar-ajustes" onclick="instalarApp()">📲 Instalar aplicativo</button>
 
     <h2>Backup</h2>
     <div class="linha-btn">
@@ -472,6 +543,18 @@ nav button.on{color:var(--accent)}
   </div>
 </div>
 
+<!-- ════════ MODAL: COMO INSTALAR ════════ -->
+<div class="modal" id="modal-instalar" onclick="fecharModal(event,'modal-instalar')">
+  <div class="modal-cx" onclick="event.stopPropagation()">
+    <div class="puxador"></div>
+    <h3>Instalar na tela inicial</h3>
+    <div class="sub" id="mi-sub"></div>
+    <div id="mi-passos"></div>
+    <div class="ajuda" id="mi-ajuda"></div>
+    <button class="btn" style="margin-top:14px" onclick="fecharModalId('modal-instalar')">Entendi</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -511,6 +594,20 @@ function api(caminho, corpo){
     });
   });
 }
+
+// ─── modo claro / noturno ─────────────────────────────────────────────────────
+function temaAtual(){
+  return document.documentElement.getAttribute('data-tema') === 'claro' ? 'claro' : 'escuro';
+}
+function aplicarTema(tema){
+  document.documentElement.setAttribute('data-tema', tema);
+  try { localStorage.setItem('portaria_tema', tema); } catch(e) {}
+  var b = $('btn-tema');
+  if (b) b.textContent = tema === 'claro' ? '🌙' : '☀️';   // mostra pra onde o botão leva
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', tema === 'claro' ? '#ffffff' : '#0f1117');
+}
+function alternarTema(){ aplicarTema(temaAtual() === 'claro' ? 'escuro' : 'claro'); }
 
 function imgUrl(id){ return '/api/imagem?id=' + encodeURIComponent(id) + (PIN ? '&pin=' + encodeURIComponent(PIN) : ''); }
 function novoId(p){ return p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -1338,6 +1435,7 @@ function renderAjustes(){
   var blocos = (c.blocos||[]).length;
   var aptos = (c.blocos||[]).reduce(function(s,b){ return s + (b.apartamentos||[]).length; }, 0);
   var mor = (c.blocos||[]).reduce(function(s,b){ return s + (b.apartamentos||[]).reduce(function(t,a){ return t + (a.moradores||[]).length; }, 0); }, 0);
+  atualizarInstalar();
   $('info-versao').textContent = blocos + ' bloco(s) · ' + aptos + ' apartamento(s) · ' + mor + ' morador(es) · ' +
     dados.pacotes.length + ' encomenda(s) no sistema.';
 }
@@ -1400,6 +1498,106 @@ function importar(ev){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// INSTALAR NA TELA INICIAL (vira um app no celular)
+// ═══════════════════════════════════════════════════════════════════════════════
+var _convite = null;   // o navegador guarda aqui o convite de instalação
+
+function jaInstalado(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function ehIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+
+// Chrome/Edge/Android avisam quando dá pra instalar; guardamos o convite pro botão
+window.addEventListener('beforeinstallprompt', function(ev){
+  ev.preventDefault();
+  _convite = ev;
+  atualizarInstalar();
+});
+window.addEventListener('appinstalled', function(){
+  _convite = null;
+  toast('App instalado 🎉', 'ok');
+  atualizarInstalar();
+});
+
+function atualizarInstalar(){
+  var faixa = $('faixa-instalar');
+  var dispensou = localStorage.getItem('portaria_instalar_nao') === '1';
+  // a faixa só aparece quando dá pra instalar de verdade e o porteiro não dispensou
+  if (faixa) faixa.classList.toggle('ver', !!_convite && !jaInstalado() && !dispensou);
+
+  var btn = $('btn-instalar-ajustes'), tit = $('app-titulo'), det = $('app-detalhe'), ic = $('app-ic');
+  if (!btn) return;
+  if (jaInstalado()){
+    btn.style.display = 'none';
+    if (ic) ic.textContent = '✅';
+    if (tit) tit.textContent = 'App instalado';
+    if (det) det.textContent = 'Você já está usando pelo atalho da tela inicial.';
+  } else {
+    btn.style.display = 'flex';
+    if (ic) ic.textContent = '📲';
+    if (tit) tit.textContent = 'Instalar na tela inicial';
+    if (det) det.textContent = _convite
+      ? 'Toque no botão abaixo: fica com ícone próprio e abre em tela cheia.'
+      : 'Fica com ícone próprio e abre em tela cheia. Toque abaixo para ver o passo a passo do seu aparelho.';
+  }
+}
+function dispensarInstalar(){
+  localStorage.setItem('portaria_instalar_nao', '1');
+  atualizarInstalar();
+}
+
+function instalarApp(){
+  if (jaInstalado()) return toast('O app já está instalado neste aparelho');
+  if (_convite){
+    // caminho fácil: o próprio navegador instala
+    _convite.prompt();
+    _convite.userChoice.then(function(r){
+      if (r && r.outcome === 'accepted'){ _convite = null; atualizarInstalar(); }
+    }).catch(function(){});
+    return;
+  }
+  mostrarComoInstalar();
+}
+
+// iPhone nunca oferece sozinho, e no computador o convite pode não ter chegado:
+// nesses casos mostramos o passo a passo certo pra cada aparelho.
+function mostrarComoInstalar(){
+  var seguro = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  var passos, sub;
+  if (ehIOS()){
+    sub = 'No iPhone e no iPad, use o Safari.';
+    passos = [
+      'Abra este endereço no <b>Safari</b> (não funciona pelo Chrome no iPhone).',
+      'Toque no botão <b>Compartilhar</b> — o quadradinho com a seta para cima, embaixo.',
+      'Deslize e toque em <b>Adicionar à Tela de Início</b>.',
+      'Confirme em <b>Adicionar</b>. O ícone da Portaria aparece junto dos outros apps.'
+    ];
+  } else if (/android/i.test(navigator.userAgent)){
+    sub = 'No Android, use o Chrome.';
+    passos = [
+      'Toque nos <b>três pontinhos</b> ⋮ no canto do navegador.',
+      'Escolha <b>Instalar aplicativo</b> (ou <b>Adicionar à tela inicial</b>).',
+      'Confirme em <b>Instalar</b>.'
+    ];
+  } else {
+    sub = 'No computador, use o Chrome ou o Edge.';
+    passos = [
+      'Olhe o canto direito da barra de endereço: tem um ícone de <b>instalar</b> (uma telinha com uma seta).',
+      'Clique nele e confirme em <b>Instalar</b>.',
+      'Se não aparecer, use o menu ⋮ → <b>Transmitir, salvar e compartilhar</b> → <b>Instalar página como aplicativo</b>.'
+    ];
+  }
+  $('mi-sub').textContent = sub;
+  $('mi-passos').innerHTML = passos.map(function(t, i){
+    return '<div class="passo"><b class="n">' + (i+1) + '</b><span>' + t + '</span></div>';
+  }).join('');
+  $('mi-ajuda').innerHTML = seguro
+    ? 'Depois de instalado, o app abre em tela cheia e continua conversando com o servidor da portaria normalmente.'
+    : '⚠️ Este endereço está em <b>http</b> comum. Os navegadores só deixam instalar (e só liberam a câmera) em <b>https</b> ou em <b>localhost</b>. Publique o app com https para poder instalar no celular.';
+  abrirModal('modal-instalar');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MODAIS
 // ═══════════════════════════════════════════════════════════════════════════════
 function abrirModal(id){ $(id).classList.add('ativa'); }
@@ -1443,7 +1641,9 @@ function entrarComPin(){
 
 function abrirApp(){
   carregar().then(function(){
-    irPara('home', true);
+    // atalho do app instalado (?tela=pendentes) abre direto na lista
+    var alvo = new URLSearchParams(location.search).get('tela');
+    irPara((alvo === 'pendentes' || alvo === 'historico') ? alvo : 'home', true);
     if (!porteiro) setTimeout(function(){ toast('Coloque seu nome em Ajustes'); }, 900);
   }).catch(erro);
 }
@@ -1481,6 +1681,8 @@ document.addEventListener('visibilitychange', function(){
 });
 window.addEventListener('beforeunload', camParar);
 
+aplicarTema(temaAtual());
+atualizarInstalar();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function(){});
 iniciar();
 </script>

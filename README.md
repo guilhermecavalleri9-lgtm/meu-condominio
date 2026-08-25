@@ -17,11 +17,23 @@ Sobe sozinho com `node server.js`, sem depender de nenhum outro sistema, e usa s
 5. **Histórico** — as entregas feitas, com o comprovante (foto + assinatura).
 6. **Ajustes** — nome do condomínio, nome do porteiro e o texto das mensagens.
 
+O botão no canto de cima alterna **modo claro / noturno**. Sem escolha feita, ele segue o
+tema do próprio aparelho; depois de escolher, a preferência fica gravada naquele aparelho.
+
 Cada apartamento pode ter **vários moradores, cada um com o seu WhatsApp**, e uma
 chavinha por morador diz quem recebe ou não o aviso.
 
-O app é um PWA: dá para instalar na tela inicial do celular ("Adicionar à tela de início")
-e ele abre em tela cheia, sem barra do navegador.
+## Instalar como app no celular
+
+O app é um PWA. Na tela inicial aparece a faixa **Instalar na tela inicial** (e o mesmo
+botão fica em Ajustes): ele ganha ícone próprio e abre em tela cheia, sem barra do
+navegador. No Android o próprio Chrome instala com um toque; no iPhone o app mostra o
+passo a passo do Safari (Compartilhar → Adicionar à Tela de Início), porque o iOS não
+tem instalação automática.
+
+⚠️ **Instalar exige `https`** (ou `localhost`) — assim como a câmera. Pelo IP da rede em
+`http` comum, o navegador não oferece a instalação; o app avisa isso na tela em vez de
+deixar você tentando à toa.
 
 ## Rodando
 
