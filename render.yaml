@@ -16,13 +16,17 @@ services:
       - key: PORTARIA_SECRET
         generateValue: true
       # ── dados ──────────────────────────────────────────────────────────────
-      # O disco do plano free é apagado a cada deploy: use o Supabase para não
-      # perder cadastro, encomendas e contas. Preencha no painel do Render.
+      # O disco do plano free é apagado quando o serviço dorme ou reinicia: use o
+      # Supabase para não perder cadastro, encomendas e contas. Preencha no painel.
+      # SUPABASE_KEY precisa ser a service_role key (secreta), não a anon.
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
         sync: false
       # ── WhatsApp automático (opcional) ─────────────────────────────────────
+      # exige um código para criar a conta de administrador (app exposto na internet)
+      - key: PORTARIA_CODIGO_ADMIN
+        sync: false
       - key: WHATSAPP_PROVIDER
         sync: false
       - key: ZAPI_INSTANCE

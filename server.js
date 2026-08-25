@@ -13,6 +13,9 @@ const whats = require('./lib/whatsapp');
 const auth  = require('./lib/auth');
 
 const PORT = process.env.PORT || 3010;
+// Código exigido para criar a PRIMEIRA conta (a de administrador). Protege quem
+// deixa o app aberto na internet: sem ele, quem chegasse primeiro virava admin.
+const CODIGO_ADMIN = String(process.env.PORTARIA_CODIGO_ADMIN || '').trim();
 // Cada pessoa da portaria tem a sua conta. Quem se cadastra fica pendente até um
 // administrador aprovar; o primeiro cadastro do sistema nasce administrador.
 
@@ -270,6 +273,8 @@ async function api(req, res, pathname, query) {
       logado: auth.usuarioPublico(logado),
       // sem ninguém cadastrado, o primeiro cadastro vira o administrador
       primeiroAcesso: usuarios.length === 0,
+      exigeCodigoAdmin: usuarios.length === 0 && !!CODIGO_ADMIN,
+      armazenamento: store.usandoSupabase ? 'supabase' : 'arquivo',
       envioAutomatico: whats.automatico(),
       provedor: whats.automatico() ? whats.provedor : null
     });
@@ -290,6 +295,8 @@ async function api(req, res, pathname, query) {
       return json(res, 409, { error: 'Esse usuário já existe' });
 
     const primeiro = usuarios.length === 0;
+    if (primeiro && CODIGO_ADMIN && String(body.codigo || '').trim() !== CODIGO_ADMIN)
+      return json(res, 403, { error: 'Código de administrador incorreto', precisaCodigo: true });
     const novo = {
       id: novoId('u'), usuario, nome,
       senha: auth.hashSenha(senha),
@@ -600,6 +607,10 @@ async function atender(req, res) {
     if (pathname.indexOf('/api/') === 0) return await api(req, res, pathname, u.searchParams);
   } catch (e) {
     console.error('[erro]', pathname, e.message);
+    // dado ilegível nunca pode ser confundido com "ainda não existe": sem isso,
+    // um arquivo corrompido zeraria a lista de contas e abriria o cadastro de admin
+    if (e.name === 'DadoIlegivel')
+      return json(res, 503, { error: 'Os dados do sistema não puderam ser lidos. Nada foi apagado — restaure a cópia de segurança antes de continuar.' });
     return json(res, 500, { error: 'erro no servidor: ' + e.message });
   }
 
@@ -636,6 +647,9 @@ const server = usandoTLS
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🏢 Meu Condomínio na porta ${PORT} (${usandoTLS ? 'https' : 'http'})`);
   console.log(`   dados: ${store.usandoSupabase ? 'Supabase' : store.DATA_DIR}`);
+  if (!store.usandoSupabase)
+    console.log('   ⚠ os dados ficam em disco: em hospedagem que dorme ou reinicia (Render free e afins)\n' +
+                '     isso é apagado a cada restart. Configure SUPABASE_URL e SUPABASE_KEY.');
   console.log(`   whatsapp: ${whats.automatico() ? 'automático (' + whats.provedor + ')' : 'manual (link wa.me)'}`);
   if (!usandoTLS) console.log('   ⚠ sem https: senha e foto trafegam abertas fora de localhost — veja o README');
   lerUsuarios().then(us => {

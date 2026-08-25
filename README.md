@@ -155,6 +155,7 @@ Exemplo do padrão:
 |---|---|
 | `PORT` | porta do servidor (padrão `3010`) |
 | `PORTARIA_SECRET` | chave que assina as sessões; sem ela, uma é gerada e guardada junto dos dados |
+| `PORTARIA_CODIGO_ADMIN` | exige este código para criar a primeira conta (a de administrador) |
 | `TLS_CERT` + `TLS_KEY` | caminhos do certificado e da chave; com os dois, o app fala https direto |
 | `DATA_DIR` | pasta dos dados no modo arquivo (padrão `dados/`) |
 | `SUPABASE_URL` + `SUPABASE_KEY` | guarda tudo no Supabase em vez do disco |
@@ -162,23 +163,49 @@ Exemplo do padrão:
 
 ## Onde ficam os dados
 
-Sem Supabase, tudo vai para arquivos JSON em `dados/` (gravação atômica: escreve
-num temporário e renomeia, para não corromper se faltar energia). Em hospedagem que apaga o
-disco a cada deploy (Render, Railway e afins), use o Supabase criando a tabela:
+Dois modos, escolhidos pelas variáveis de ambiente:
 
-As contas ficam na mesma tabela/pasta dos outros dados (chave `usuarios`).
+**Arquivo (padrão)** — JSON em `dados/`, com gravação atômica, uma gravação por vez em cada
+chave e uma cópia `.bak` da versão anterior. Se o arquivo principal aparecer corrompido, o
+app volta sozinho para a cópia e guarda o quebrado como `.quebrado-<data>`.
+
+> ⚠️ **Em hospedagem que dorme ou reinicia (Render free, Railway, Fly sem volume), o disco é
+> descartado**: ao acordar, o container sobe vazio e contas, encomendas e fotos somem juntas.
+> Nesses lugares, use o Supabase.
+
+**Supabase** — preencha `SUPABASE_URL` e `SUPABASE_KEY` e tudo passa a ser gravado lá,
+sobrevivendo a qualquer restart. A tabela precisa existir:
 
 ```sql
-create table portaria_kv (
+create table public.portaria_kv (
   chave text primary key,
   valor jsonb not null,
-  atualizado_em timestamptz default now()
+  atualizado_em timestamptz not null default now()
 );
+-- RLS ligada e sem políticas: a chave pública não alcança a tabela.
+-- A tabela guarda hash de senha e telefone de morador — só o servidor entra,
+-- usando a service_role key.
+alter table public.portaria_kv enable row level security;
 ```
 
-Fotos e assinaturas ficam em chaves separadas das listas, então carregar a tela de
-encomendas não puxa imagem nenhuma. Entregas com mais de 120 dias saem do histórico
-automaticamente, junto com as suas imagens.
+`SUPABASE_KEY` precisa ser a **service_role key** (Supabase → *Project Settings* → *API
+Keys* → `service_role`/*secret*), nunca a chave pública `anon`: com a RLS ligada, a pública
+é bloqueada de propósito. Ela é secreta — guarde só nas variáveis de ambiente do servidor.
+
+As contas ficam na chave `usuarios`, o prédio em `cadastro`, as encomendas em `pacotes` e
+cada foto ou assinatura em `img:<id>` — as imagens em chaves separadas, para carregar a
+lista de encomendas não puxar imagem nenhuma. Entregas com mais de 120 dias saem do
+histórico automaticamente, junto com as suas imagens.
+
+## Quando algo falha
+
+O app foi feito para **nunca confundir "não consegui ler" com "não existe"** — essa confusão
+apagaria as contas e, pior, deixaria a tela de "crie a conta do administrador" aberta para
+qualquer um. Se o arquivo estiver corrompido ou o Supabase fora do ar, o app responde
+`503` com um aviso claro e não deixa criar conta nenhuma até o problema ser resolvido.
+
+Para o caso de o app ficar exposto na internet, defina `PORTARIA_CODIGO_ADMIN`: a criação da
+**primeira** conta (a de administrador) passa a exigir esse código.
 
 ## Logo e ícones
 

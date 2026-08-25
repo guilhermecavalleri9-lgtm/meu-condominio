@@ -315,6 +315,10 @@ nav button.on{color:var(--accent)}
       <input type="password" id="cr-senha" autocomplete="new-password" placeholder="pelo menos 6 caracteres">
       <label>Repita a senha</label>
       <input type="password" id="cr-senha2" autocomplete="new-password" placeholder="a mesma senha">
+      <div id="cr-bloco-codigo" style="display:none">
+        <label>Código de administrador</label>
+        <input type="password" id="cr-codigo" placeholder="o código configurado no servidor">
+      </div>
       <div class="ajuda" id="cr-ajuda">Depois de criar, um administrador precisa aprovar o seu acesso.</div>
       <button class="btn btn-a" style="margin-top:14px" id="btn-criar" onclick="criarConta()">Criar conta</button>
     </div>
@@ -420,6 +424,14 @@ nav button.on{color:var(--accent)}
     <div class="linha-btn">
       <button class="btn btn-p" onclick="abrirTrocarSenha()">🔑 Trocar senha</button>
       <button class="btn btn-p btn-r" onclick="sair()">🚪 Sair</button>
+    </div>
+
+    <div class="card plano" id="aviso-dados" style="display:none;align-items:flex-start;border-color:var(--amber)">
+      <div class="ic">⚠️</div>
+      <div class="txt">
+        <div class="nome">Os dados estão gravados em disco</div>
+        <div class="det" style="white-space:normal">Em hospedagem que dorme ou reinicia, tudo isto — contas, encomendas e fotos — é apagado junto. Configure o Supabase no servidor (SUPABASE_URL e SUPABASE_KEY) para os dados ficarem guardados de verdade.</div>
+      </div>
     </div>
 
     <div id="area-contas" style="display:none">
@@ -1760,7 +1772,7 @@ function criarConta(){
   btn.disabled = true; btn.textContent = 'Criando…';
   fetch('/api/auth/registrar', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ nome: nome, usuario: usuario, senha: senha })
+    body: JSON.stringify({ nome: nome, usuario: usuario, senha: senha, codigo: ($('cr-codigo').value || '').trim() })
   }).then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
     .then(function(res){
       if (!res.ok) return msgLogin(res.j.error || 'Não consegui criar a conta');
@@ -1808,6 +1820,8 @@ function sair(){
 // deixa a tela de login sabendo se ainda não existe ninguém cadastrado
 function prepararLogin(){
   fetch('/api/sessao').then(function(r){ return r.json(); }).then(function(s){
+    dados.armazenamento = s.armazenamento;
+    $('cr-bloco-codigo').style.display = s.exigeCodigoAdmin ? 'block' : 'none';
     if (s.primeiroAcesso){
       $('login-sub').textContent = 'Ninguém cadastrado ainda — crie a conta do administrador';
       $('cr-ajuda').innerHTML = '<b>Esta será a conta de administrador</b>, com acesso liberado na hora. Os próximos cadastros vão precisar da sua aprovação.';
@@ -1827,6 +1841,10 @@ function renderConta(){
   $('conta-nome').textContent = EU.nome + (EU.papel === 'admin' ? ' · administrador' : '');
   $('conta-det').textContent = '@' + EU.usuario + ' · entrou ' + (EU.ultimoAcesso ? quando(EU.ultimoAcesso) : 'agora');
   $('area-contas').style.display = EU.papel === 'admin' ? 'block' : 'none';
+  // só mostra o alerta pra quem pode resolver, e só quando não é uso local
+  var local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  $('aviso-dados').style.display =
+    (EU.papel === 'admin' && dados.armazenamento === 'arquivo' && !local) ? 'flex' : 'none';
   if (EU.papel === 'admin') carregarContas();
 }
 
@@ -1916,6 +1934,7 @@ function iniciar(){
   var op = TOKEN ? { headers: { Authorization: 'Bearer ' + TOKEN } } : {};
   fetch('/api/sessao', op).then(function(r){ return r.json(); }).then(function(s){
     if (s.logado){
+      dados.armazenamento = s.armazenamento;
       guardarSessao(TOKEN, s.logado);
       abrirApp();
       return;
