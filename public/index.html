@@ -400,7 +400,7 @@ nav button.on{color:var(--accent)}
         <div class="cam-mira"><i></i></div>
       </div>
       <div class="aviso-bip" id="aviso-bip"></div>
-      <div class="ajuda">O leitor USB funciona direto: mantenha esta tela aberta e bipe. No celular, use a câmera.</div>
+      <div class="ajuda">O leitor USB funciona direto: mantenha esta tela aberta e bipe. No celular, use a câmera — ela só aceita códigos de 9 a 32 caracteres, para não pegar código de barras do produto.</div>
     </div>
 
     <div id="area-pendentes"></div>
@@ -1145,6 +1145,23 @@ function marcarAvisado(ids){
 // ─── câmera ───────────────────────────────────────────────────────────────────
 var _camAtiva = false, _camStream = null, _camLoop = null, _camDetector = null, _camH5 = null;
 
+// A câmera enxerga tudo o que estiver na caixa: código de barras do produto,
+// selo do fabricante, QR de propaganda. Só entra o que tem cara de código de
+// rastreio — de 9 a 32 caracteres. Digitar ou bipar no leitor USB continua livre.
+var COD_MIN = 9, COD_MAX = 32;
+var _ultimoIgnorado = '', _ultimoIgnoradoTs = 0;
+
+function camLeu(bruto){
+  var cod = String(bruto || '').trim();
+  if (cod.length >= COD_MIN && cod.length <= COD_MAX) return registrarCodigo(cod);
+  // avisa uma vez por código, senão a mesma etiqueta errada repete sem parar
+  var agora = Date.now();
+  if (cod === _ultimoIgnorado && agora - _ultimoIgnoradoTs < 4000) return;
+  _ultimoIgnorado = cod; _ultimoIgnoradoTs = agora;
+  mostrarAviso('rep', '⚠ ignorado: ' + cod.length + ' caractere' + (cod.length === 1 ? '' : 's') +
+    ' (a câmera aceita de ' + COD_MIN + ' a ' + COD_MAX + ')');
+}
+
 function camToggle(){ _camAtiva ? camParar() : camIniciar(); }
 
 function camIniciar(){
@@ -1173,7 +1190,7 @@ function camNativo(){
       var loop = function(){
         if (!_camAtiva || !_camDetector) return;
         _camDetector.detect(v).then(function(cods){
-          if (cods && cods.length) registrarCodigo(cods[0].rawValue);
+          if (cods && cods.length) camLeu(cods[0].rawValue);
         }).catch(function(){});
         _camLoop = requestAnimationFrame(loop);
       };
@@ -1189,7 +1206,7 @@ function camFallback(){
     _camH5 = new Html5Qrcode('leitor');
     return _camH5.start({ facingMode:'environment' },
       { fps:15, qrbox:{ width:280, height:150 } },
-      function(txt){ registrarCodigo(txt); }, function(){});
+      function(txt){ camLeu(txt); }, function(){});
   }).catch(function(e){
     mostrarAviso('err', 'Não consegui abrir a câmera: ' + (e.message || e));
     camParar();
