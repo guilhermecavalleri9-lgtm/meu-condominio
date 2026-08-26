@@ -6,18 +6,29 @@ Sobe sozinho com `node server.js`, sem depender de nenhum outro sistema, e usa s
 
 ## Contas e acesso
 
-Cada pessoa da portaria tem a **sua conta** — os dados ficam todos no servidor, então
-entrar de outro navegador, de outro computador ou do celular traz tudo de volta (inclusive
-a preferência de tema).
+Há três níveis, e cada conta principal tem **o seu próprio condomínio**:
 
-- **O primeiro cadastro do sistema vira o administrador**, já liberado (senão não existiria
-  ninguém para aprovar os outros).
-- Os demais se cadastram normalmente, mas o acesso **fica pendente até o administrador
-  aprovar**, em Ajustes → *Contas da portaria*.
-- O administrador também recusa, libera de novo, promove a administrador e exclui contas.
-  O sistema não deixa ficar sem nenhum administrador.
-- Quem bipou e quem entregou é registrado a partir da conta logada — não dá para digitar
-  outro nome.
+| | administrador do sistema | conta principal | subconta |
+|---|---|---|---|
+| aprovar cadastros novos | ✅ | — | — |
+| criar e excluir subcontas | ✅ | ✅ (as suas) | — |
+| criar blocos e apartamentos | ✅ | ✅ | — |
+| cadastrar e editar moradores | ✅ | ✅ | ✅ |
+| bipar, avisar e entregar | ✅ | ✅ | ✅ |
+
+- **Conta principal** — quem se cadastra pelo app. Cada uma enxerga só o seu prédio:
+  blocos, apartamentos, moradores, encomendas e fotos são separados por conta.
+  O cadastro **fica pendente até o administrador do sistema aprovar**.
+- **Subconta** — criada pela conta principal, em Ajustes → *Subcontas*, para os porteiros
+  do turno. Entra na hora, sem aprovação, e trabalha **dentro do prédio de quem a criou**:
+  faz o dia a dia e cuida dos moradores, mas não mexe em blocos, apartamentos, mensagens
+  nem em contas. Excluir a conta principal exclui as subcontas dela junto.
+- **Administrador do sistema** — a primeira conta criada. Além de ter o próprio condomínio,
+  aprova ou recusa as contas principais novas.
+
+O bloqueio é feito **no servidor**, não só escondendo botões: se uma subconta tentar criar
+um bloco ou apagar um apartamento pela API, o servidor reconstrói o prédio como estava e
+aceita só a mudança nos moradores.
 
 Senhas ficam guardadas só como hash `scrypt` com sal próprio. A sessão dura 30 dias num
 token assinado; recusar ou excluir uma conta derruba o acesso na hora. Cinco senhas erradas
@@ -192,8 +203,8 @@ alter table public.portaria_kv enable row level security;
 Keys* → `service_role`/*secret*), nunca a chave pública `anon`: com a RLS ligada, a pública
 é bloqueada de propósito. Ela é secreta — guarde só nas variáveis de ambiente do servidor.
 
-As contas ficam na chave `usuarios`, o prédio em `cadastro`, as encomendas em `pacotes` e
-cada foto ou assinatura em `img:<id>` — as imagens em chaves separadas, para carregar a
+As contas ficam na chave `usuarios`; o prédio e as encomendas de cada conta principal em
+`cadastro:<id da conta>` e `pacotes:<id da conta>`; cada foto ou assinatura em `img:<id>` — as imagens em chaves separadas, para carregar a
 lista de encomendas não puxar imagem nenhuma. Entregas com mais de 120 dias saem do
 histórico automaticamente, junto com as suas imagens.
 

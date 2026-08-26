@@ -366,7 +366,7 @@ nav button.on{color:var(--accent)}
       <button class="fechar" onclick="dispensarInstalar()" aria-label="Agora não">✕</button>
     </div>
     <div class="linha-btn">
-      <button class="btn btn-a btn-p" onclick="abrirBloco()">➕ Adicionar bloco</button>
+      <button class="btn btn-a btn-p" id="btn-add-bloco" onclick="abrirBloco()">➕ Adicionar bloco</button>
       <button class="btn btn-p" onclick="irPara('pendentes')">📦 Pendentes <span id="ct-pend2" class="contagem"></span></button>
     </div>
     <h2>Blocos cadastrados</h2>
@@ -376,12 +376,12 @@ nav button.on{color:var(--accent)}
   <!-- ════════ BLOCO: APARTAMENTOS ════════ -->
   <section class="tela" id="tela-bloco">
     <div class="linha-btn">
-      <button class="btn btn-a btn-p" onclick="abrirApto()">➕ Adicionar apartamento</button>
-      <button class="btn btn-p" onclick="abrirBloco(estado.blocoId)">✏️ Editar bloco</button>
+      <button class="btn btn-a btn-p" id="btn-add-apto" onclick="abrirApto()">➕ Adicionar apartamento</button>
+      <button class="btn btn-p" id="btn-edit-bloco" onclick="abrirBloco(estado.blocoId)">✏️ Editar bloco</button>
     </div>
     <input type="search" id="busca-apto" placeholder="Buscar apartamento ou morador…" oninput="renderAptos()" style="margin-bottom:12px">
     <div class="grade" id="lista-aptos"></div>
-    <div id="aptos-vazio" class="vazio" style="display:none">Nenhum apartamento cadastrado.<br>Toque em <b>Adicionar apartamento</b>.</div>
+    <div id="aptos-vazio" class="vazio" style="display:none"></div>
   </section>
 
   <!-- ════════ APARTAMENTO: BIPAR E ENTREGAR ════════ -->
@@ -448,11 +448,19 @@ nav button.on{color:var(--accent)}
       </div>
     </div>
 
+    <div id="area-subcontas" style="display:none">
+      <h2>Subcontas <span style="text-transform:none;letter-spacing:0;color:var(--text3);font-weight:500">· quem trabalha com você</span></h2>
+      <div id="lista-subcontas"></div>
+      <button class="btn btn-a btn-p" onclick="abrirSubconta()">➕ Criar subconta</button>
+      <div class="ajuda">A subconta entra na hora, sem esperar aprovação. Ela cuida do dia a dia e dos moradores, mas não mexe em blocos nem em apartamentos.</div>
+    </div>
+
     <div id="area-contas" style="display:none">
-      <h2>Contas da portaria <span id="ct-pendentes" style="text-transform:none;letter-spacing:0;color:var(--amber);font-weight:700"></span></h2>
+      <h2>Contas do sistema <span id="ct-pendentes" style="text-transform:none;letter-spacing:0;color:var(--amber);font-weight:700"></span></h2>
       <div id="lista-contas"></div>
     </div>
 
+    <div id="area-condominio">
     <h2>Portaria</h2>
     <label>Nome do condomínio</label>
     <input type="text" id="cfg-condominio" placeholder="Residencial Primavera">
@@ -502,12 +510,16 @@ nav button.on{color:var(--accent)}
     </div>
     <button class="btn btn-a btn-p" id="btn-instalar-ajustes" onclick="instalarApp()">📲 Instalar aplicativo</button>
 
+    </div><!-- fim da configuração do condomínio -->
+
+    <div id="area-backup">
     <h2>Backup</h2>
     <div class="linha-btn">
       <button class="btn btn-p" onclick="exportar()">⬇️ Baixar cadastro</button>
       <button class="btn btn-p" onclick="document.getElementById('arq-import').click()">⬆️ Importar</button>
     </div>
     <input type="file" id="arq-import" accept="application/json" style="display:none" onchange="importar(event)">
+    </div>
     <div class="ajuda" id="info-versao" style="margin-top:14px"></div>
   </section>
 </main>
@@ -660,6 +672,23 @@ nav button.on{color:var(--accent)}
   </div>
 </div>
 
+<!-- ════════ MODAL: NOVA SUBCONTA ════════ -->
+<div class="modal" id="modal-subconta" onclick="fecharModal(event,'modal-subconta')">
+  <div class="modal-cx" onclick="event.stopPropagation()">
+    <div class="puxador"></div>
+    <h3>Criar subconta</h3>
+    <div class="sub">Para quem trabalha com você na portaria.</div>
+    <label>Nome da pessoa</label>
+    <input type="text" id="sb-nome" placeholder="Ex.: João da Noite">
+    <label>Usuário (para entrar)</label>
+    <input type="text" id="sb-usuario" autocapitalize="none" spellcheck="false" placeholder="ex.: joao">
+    <label>Senha</label>
+    <input type="password" id="sb-senha" placeholder="pelo menos 6 caracteres">
+    <div class="ajuda">Passe o usuário e a senha para a pessoa — ela pode trocar a senha depois, em Ajustes.</div>
+    <button class="btn btn-a" style="margin-top:16px" onclick="salvarSubconta()">Criar subconta</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -787,6 +816,7 @@ function irPara(tela, semHistorico){
   });
   $('btn-voltar').style.display = (tela === 'bloco' || tela === 'apto') ? 'flex' : 'none';
   window.scrollTo(0,0);
+  aplicarPermissoes();
   atualizarTopo();
   if (tela === 'home') renderBlocos();
   if (tela === 'bloco') renderAptos();
@@ -803,6 +833,18 @@ function voltar(){
 }
 function abrirBlocoTela(id){ estado.blocoId = id; estado.aptoId = null; $('busca-apto').value=''; irPara('bloco'); }
 function abrirAptoTela(id){ estado.aptoId = id; estado.sel = {}; irPara('apto'); }
+
+// esconde da subconta o que ela não pode fazer (o servidor recusa de qualquer
+// jeito, mas botão que não funciona só confunde quem está trabalhando)
+function aplicarPermissoes(){
+  var pode = souPrincipal();
+  ['btn-add-bloco', 'btn-add-apto', 'btn-edit-bloco'].forEach(function(id){
+    var b = $(id);
+    if (b) b.style.display = pode ? 'flex' : 'none';
+  });
+  var linha = $('btn-add-apto') && $('btn-add-apto').parentNode;
+  if (linha) linha.style.display = pode ? 'flex' : 'none';
+}
 
 function atualizarTopo(){
   var t = dados.cadastro.condominio || 'Meu Condomínio', s = 'Encomendas do condomínio';
@@ -825,7 +867,9 @@ function renderBlocos(){
   var n = totalPendentes();
   $('ct-pend2').textContent = n ? '(' + n + ')' : '';
   if (!blocos.length){
-    $('lista-blocos').innerHTML = '<div class="vazio">Nenhum bloco cadastrado ainda.<br>Toque em <b>Adicionar bloco</b> pra começar.</div>';
+    $('lista-blocos').innerHTML = '<div class="vazio">' + (souPrincipal()
+      ? 'Nenhum bloco cadastrado ainda.<br>Toque em <b>Adicionar bloco</b> pra começar.'
+      : 'Nenhum bloco cadastrado ainda.<br>A conta principal precisa cadastrar os blocos.') + '</div>';
     return;
   }
   $('lista-blocos').innerHTML = '<div class="grade-blocos">' + blocos.map(function(b){
@@ -861,6 +905,9 @@ function renderAptos(){
     return String(x.numero).localeCompare(String(y.numero), 'pt-BR', { numeric:true });
   });
   $('aptos-vazio').style.display = (b.apartamentos||[]).length ? 'none' : 'block';
+  $('aptos-vazio').innerHTML = souPrincipal()
+    ? 'Nenhum apartamento cadastrado.<br>Toque em <b>Adicionar apartamento</b>.'
+    : 'Nenhum apartamento cadastrado neste bloco.<br>Peça para a conta principal cadastrar.';
   $('lista-aptos').innerHTML = lista.map(function(a){
     var pend = pendentesDe(a.id).length;
     var quem = (a.moradores||[]).length ? esc(a.moradores[0].nome.split(' ')[0]) +
@@ -1368,6 +1415,7 @@ function salvarCadastro(){
 
 var _editBloco = null;
 function abrirBloco(id){
+  if (!souPrincipal()) return toast('Só a conta principal cadastra blocos', 'err');
   _editBloco = id || null;
   var b = id ? (dados.cadastro.blocos||[]).find(function(x){ return x.id === id; }) : null;
   $('mb-titulo').textContent = b ? 'Editar bloco' : 'Novo bloco';
@@ -1421,6 +1469,7 @@ var _editApto = null;
 function abrirApto(id){
   var b = blocoAtual();
   if (!b) return toast('Escolha um bloco primeiro', 'err');
+  if (!souPrincipal()) return toast('Só a conta principal cadastra apartamentos', 'err');
   _editApto = id || null;
   var a = id ? (b.apartamentos||[]).find(function(x){ return x.id === id; }) : null;
   $('ma-titulo').textContent = a ? 'Editar apartamento' : 'Novo apartamento';
@@ -1850,16 +1899,26 @@ function prepararLogin(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONTAS (só o administrador vê)
 // ═══════════════════════════════════════════════════════════════════════════════
+// quem pode mexer no prédio (blocos e apartamentos) e nas contas
+function souPrincipal(){ return EU && (EU.papel === 'admin' || EU.papel === 'principal'); }
+function nomeDoPapel(p){
+  return p === 'admin' ? 'administrador do sistema' : (p === 'sub' ? 'subconta' : 'conta principal');
+}
+
 function renderConta(){
   if (!EU) return;
-  $('conta-nome').textContent = EU.nome + (EU.papel === 'admin' ? ' · administrador' : '');
+  $('conta-nome').textContent = EU.nome + ' · ' + nomeDoPapel(EU.papel);
   $('conta-det').textContent = '@' + EU.usuario + ' · entrou ' + (EU.ultimoAcesso ? quando(EU.ultimoAcesso) : 'agora');
+  // subconta não gerencia contas nem configura o condomínio
+  $('area-subcontas').style.display = souPrincipal() ? 'block' : 'none';
   $('area-contas').style.display = EU.papel === 'admin' ? 'block' : 'none';
+  $('area-condominio').style.display = souPrincipal() ? 'block' : 'none';
+  $('area-backup').style.display = souPrincipal() ? 'block' : 'none';
   // só mostra o alerta pra quem pode resolver, e só quando não é uso local
   var local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   $('aviso-dados').style.display =
     (EU.papel === 'admin' && dados.armazenamento === 'arquivo' && !local) ? 'flex' : 'none';
-  if (EU.papel === 'admin') carregarContas();
+  if (souPrincipal()) carregarContas();
 }
 
 function carregarContas(){
@@ -1869,9 +1928,41 @@ function carregarContas(){
       if (ordem[a.status] !== ordem[b.status]) return ordem[a.status] - ordem[b.status];
       return (b.criadoEm || 0) - (a.criadoEm || 0);
     });
-    var pendentes = lista.filter(function(u){ return u.status === 'pendente'; }).length;
-    $('ct-pendentes').textContent = pendentes ? '· ' + pendentes + ' esperando' : '';
-    $('lista-contas').innerHTML = lista.map(cartaoConta).join('');
+    // as minhas subcontas de um lado; do outro, as contas do sistema (só o admin vê)
+    var minhas = lista.filter(function(u){ return u.contaPai === EU.id; });
+    $('lista-subcontas').innerHTML = minhas.length
+      ? minhas.map(cartaoConta).join('')
+      : '<div class="ajuda" style="margin-bottom:8px">Nenhuma subconta ainda. Crie uma para cada porteiro do turno.</div>';
+
+    if (EU.papel === 'admin'){
+      // aqui só as contas principais: as subcontas são assunto de quem as criou
+      var doSistema = lista.filter(function(u){ return u.contaPai !== EU.id && u.papel !== 'sub'; });
+      doSistema.forEach(function(u){
+        u._subs = lista.filter(function(x){ return x.contaPai === u.id; }).length;
+      });
+      var pendentes = doSistema.filter(function(u){ return u.status === 'pendente'; }).length;
+      $('ct-pendentes').textContent = pendentes ? '· ' + pendentes + ' esperando' : '';
+      $('lista-contas').innerHTML = doSistema.map(cartaoConta).join('');
+    }
+  }).catch(erro);
+}
+
+function abrirSubconta(){
+  $('sb-nome').value = $('sb-usuario').value = $('sb-senha').value = '';
+  abrirModal('modal-subconta');
+  setTimeout(function(){ $('sb-nome').focus(); }, 120);
+}
+function salvarSubconta(){
+  var nome = ($('sb-nome').value || '').trim();
+  var usuario = ($('sb-usuario').value || '').trim().toLowerCase();
+  var senha = $('sb-senha').value || '';
+  if (!nome) return toast('Diga o nome da pessoa', 'err');
+  if (usuario.length < 3) return toast('O usuário precisa de pelo menos 3 caracteres', 'err');
+  if (senha.length < 6) return toast('A senha precisa de pelo menos 6 caracteres', 'err');
+  api('/api/usuarios/sub', { nome: nome, usuario: usuario, senha: senha }).then(function(){
+    fecharModalId('modal-subconta');
+    toast('Subconta criada ✅', 'ok');
+    carregarContas();
   }).catch(erro);
 }
 
@@ -1879,7 +1970,8 @@ function cartaoConta(u){
   var eu = EU && u.id === EU.id;
   var selo = u.status === 'pendente' ? '<span class="tag pendente">esperando aprovação</span>'
            : u.status === 'recusado' ? '<span class="tag" style="background:rgba(248,113,113,.14);color:var(--red)">recusado</span>'
-           : (u.papel === 'admin' ? '<span class="tag avisado">administrador</span>' : '');
+           : (u.papel === 'admin' ? '<span class="tag avisado">administrador</span>'
+           : (u.papel === 'sub' ? '<span class="tag" style="background:var(--bg3);color:var(--text2)">subconta</span>' : ''));
   var botoes = '';
   if (u.status === 'pendente'){
     botoes = '<div class="linha-btn" style="margin:10px 0 0">' +
@@ -1889,8 +1981,9 @@ function cartaoConta(u){
     botoes = '<div class="linha-btn" style="margin:10px 0 0">' +
       (u.status === 'recusado'
         ? '<button class="btn btn-w btn-p" onclick="decidirConta(\'' + u.id + '\',true)">✅ Liberar</button>'
-        : '<button class="btn btn-p" onclick="trocarPapel(\'' + u.id + '\',\'' + (u.papel === 'admin' ? 'porteiro' : 'admin') + '\')">' +
-          (u.papel === 'admin' ? '👤 Tornar porteiro' : '⭐ Tornar admin') + '</button>') +
+        : (u.papel === 'sub' || EU.papel !== 'admin' ? ''
+          : '<button class="btn btn-p" onclick="trocarPapel(\'' + u.id + '\',\'' + (u.papel === 'admin' ? 'principal' : 'admin') + '\')">' +
+            (u.papel === 'admin' ? '👤 Tornar conta principal' : '⭐ Tornar admin') + '</button>')) +
       '<button class="btn btn-r btn-p" onclick="removerConta(\'' + u.id + '\')">🗑️ Excluir</button></div>';
   }
   return '<div class="card plano" style="display:block">' +
@@ -1898,7 +1991,8 @@ function cartaoConta(u){
       '<div class="ic">' + (u.status === 'pendente' ? '🕒' : (u.papel === 'admin' ? '⭐' : '👤')) + '</div>' +
       '<div class="txt"><div class="nome">' + esc(u.nome) + (eu ? ' (você)' : '') + ' ' + selo + '</div>' +
       '<div class="det">@' + esc(u.usuario) + ' · cadastro ' + quando(u.criadoEm) +
-        (u.ultimoAcesso ? ' · último acesso ' + quando(u.ultimoAcesso) : '') + '</div></div>' +
+        (u.ultimoAcesso ? ' · último acesso ' + quando(u.ultimoAcesso) : '') +
+        (u._subs ? ' · ' + u._subs + ' subconta' + (u._subs === 1 ? '' : 's') : '') + '</div></div>' +
     '</div>' + botoes + '</div>';
 }
 
@@ -1938,6 +2032,7 @@ function salvarSenha(){
 function abrirApp(){
   carregar().then(function(){
     renderConta();
+    aplicarPermissoes();
     // atalho do app instalado (?tela=pendentes) abre direto na lista
     var alvo = new URLSearchParams(location.search).get('tela');
     irPara((alvo === 'pendentes' || alvo === 'historico') ? alvo : 'home', true);

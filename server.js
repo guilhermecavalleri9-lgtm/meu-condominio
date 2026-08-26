@@ -81,11 +81,50 @@ async function segredo() {
   return _segredo;
 }
 
+// Papéis:
+//   admin     → conta principal que também administra o sistema (aprova cadastros)
+//   principal → conta própria da portaria: manda nas suas subcontas e no prédio
+//   sub       → criada por uma conta principal; faz o dia a dia e cuida dos moradores,
+//               mas não mexe em blocos, apartamentos nem em contas
+const ehPrincipal = u => u && (u.papel === 'admin' || u.papel === 'principal');
+const ehSub = u => u && u.papel === 'sub';
+
 const lerUsuarios = async () => {
   const d = await store.get('usuarios');
   return (d && Array.isArray(d.usuarios)) ? d.usuarios : [];
 };
 const gravarUsuarios = lista => store.set('usuarios', { usuarios: lista, atualizadoEm: new Date().toISOString() });
+
+// Antes existia um condomínio só, nas chaves 'cadastro' e 'pacotes'. Agora cada
+// conta principal tem o seu, então o que já existia passa a pertencer à conta
+// mais antiga (a primeira criada, dona do sistema). As chaves velhas ficam onde
+// estão, intocadas, como rede de segurança.
+async function migrarEspacos() {
+  const feito = await store.get('migracao:espacos');
+  if (feito && feito.ok) return;
+  const usuarios = await lerUsuarios();
+  const dono = usuarios.filter(u => u.papel !== 'sub').sort((a, b) => (a.criadoEm || 0) - (b.criadoEm || 0))[0];
+  if (!dono) return;                                   // ninguém cadastrado ainda
+  const cadastroAntigo = await store.get('cadastro');
+  const pacotesAntigos = await store.get('pacotes');
+  if (cadastroAntigo && !(await store.get('cadastro:' + dono.id)))
+    await store.set('cadastro:' + dono.id, cadastroAntigo);
+  if (pacotesAntigos && !(await store.get('pacotes:' + dono.id)))
+    await store.set('pacotes:' + dono.id, pacotesAntigos);
+  await store.set('migracao:espacos', { ok: true, dono: dono.usuario, quando: Date.now() });
+  if (cadastroAntigo || pacotesAntigos)
+    console.log(`[contas] condomínio existente atribuído a "${dono.usuario}"`);
+}
+
+// contas antigas eram 'porteiro' e se cadastravam sozinhas — viram contas principais
+async function migrarPapeis() {
+  const lista = await lerUsuarios();
+  const antigas = lista.filter(u => u.papel === 'porteiro');
+  if (!antigas.length) return;
+  for (const u of antigas) u.papel = 'principal';
+  await gravarUsuarios(lista);
+  console.log(`[contas] ${antigas.length} conta(s) antiga(s) convertida(s) para "principal"`);
+}
 
 function ipDoPedido(req) {
   return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
@@ -195,12 +234,19 @@ function acharLocal(cadastro, blocoId, aptoId) {
 const DIAS_HISTORICO = 120;  // entregas mais antigas saem da lista
 const MAX_PACOTES = 4000;
 
-const lerCadastro = async () => (await store.get('cadastro')) || sanearCadastro({});
-const lerPacotes = async () => {
-  const d = await store.get('pacotes');
+// Cada conta principal tem o seu próprio condomínio: prédio, moradores e
+// encomendas ficam guardados numa chave só dela. A subconta trabalha dentro do
+// espaço de quem a criou — é o mesmo prédio, visto pelo porteiro.
+const espacoDe = u => (u && u.papel === 'sub' && u.contaPai) ? u.contaPai : (u ? u.id : '');
+
+const lerCadastro = async esp => (await store.get('cadastro:' + esp)) || sanearCadastro({});
+const gravarCadastro = (esp, cadastro) => store.set('cadastro:' + esp, cadastro);
+const lerPacotes = async esp => {
+  const d = await store.get('pacotes:' + esp);
   return (d && Array.isArray(d.pacotes)) ? d.pacotes : [];
 };
-const gravarPacotes = lista => store.set('pacotes', { pacotes: lista, atualizadoEm: new Date().toISOString() });
+const gravarPacotes = (esp, lista) =>
+  store.set('pacotes:' + esp, { pacotes: lista, atualizadoEm: new Date().toISOString() });
 
 // tira do histórico o que já passou do prazo (e apaga as fotos junto)
 function limpar(lista) {
@@ -224,10 +270,10 @@ function limpar(lista) {
 }
 
 // grava foto/assinatura em chave separada — a lista de encomendas continua leve
-async function guardarImagem(dataUrl, prefixo, limite) {
+async function guardarImagem(dataUrl, prefixo, limite, espaco) {
   if (typeof dataUrl !== 'string' || dataUrl.indexOf('data:image/') !== 0) return null;
   const id = novoId(prefixo);
-  await store.set('img:' + id, { dataUrl: dataUrl.slice(0, limite), criadoEm: Date.now() });
+  await store.set('img:' + id, { dataUrl: dataUrl.slice(0, limite), criadoEm: Date.now(), espaco });
   return id;
 }
 
@@ -250,9 +296,10 @@ async function avisarMoradores(apto, montarTexto) {
 // ─── API ──────────────────────────────────────────────────────────────────────
 // rotas que funcionam sem estar logado
 const ABERTAS = new Set(['/api/sessao', '/api/auth/registrar', '/api/auth/entrar']);
-// rotas só do administrador
-const SO_ADMIN = new Set(['/api/usuarios', '/api/usuarios/aprovar', '/api/usuarios/recusar',
-                          '/api/usuarios/papel', '/api/usuarios/remover']);
+// rotas só do administrador do sistema (quem aprova cadastros novos)
+const SO_ADMIN = new Set(['/api/usuarios/aprovar', '/api/usuarios/recusar', '/api/usuarios/papel']);
+// rotas que exigem conta principal (subconta não entra)
+const SO_PRINCIPAL = new Set(['/api/usuarios', '/api/usuarios/sub', '/api/usuarios/remover']);
 
 async function api(req, res, pathname, query) {
   const usuarios = await lerUsuarios();
@@ -263,8 +310,12 @@ async function api(req, res, pathname, query) {
     eu = await quemEstaLogado(req, query);
     if (!eu) return json(res, 401, { error: 'Faça login para continuar' });
     if (SO_ADMIN.has(pathname) && eu.papel !== 'admin')
-      return json(res, 403, { error: 'Só o administrador pode fazer isso' });
+      return json(res, 403, { error: 'Só o administrador do sistema pode fazer isso' });
+    if (SO_PRINCIPAL.has(pathname) && !ehPrincipal(eu))
+      return json(res, 403, { error: 'Só a conta principal pode gerenciar contas' });
   }
+  // condomínio da vez: o da própria conta, ou o da conta principal se for subconta
+  const esp = espacoDe(eu);
 
   // ── o app pergunta como está o sistema antes de mostrar a tela ──
   if (req.method === 'GET' && pathname === '/api/sessao') {
@@ -312,7 +363,7 @@ async function api(req, res, pathname, query) {
     const novo = {
       id: novoId('u'), usuario, nome,
       senha: auth.hashSenha(senha),
-      papel: primeiro ? 'admin' : 'porteiro',
+      papel: primeiro ? 'admin' : 'principal',
       status: primeiro ? 'aprovado' : 'pendente',
       criadoEm: Date.now(),
       aprovadoEm: primeiro ? Date.now() : null,
@@ -396,9 +447,42 @@ async function api(req, res, pathname, query) {
     return json(res, 200, { ok: true });
   }
 
-  // ── administrador: lista de contas ──
+  // ── lista de contas: o admin do sistema vê todas; a principal vê as suas ──
   if (req.method === 'GET' && pathname === '/api/usuarios') {
-    return json(res, 200, { usuarios: usuarios.map(auth.usuarioPublico) });
+    const visiveis = eu.papel === 'admin'
+      ? usuarios
+      : usuarios.filter(u => u.id === eu.id || u.contaPai === eu.id);
+    return json(res, 200, { usuarios: visiveis.map(auth.usuarioPublico) });
+  }
+
+  // ── conta principal cria uma subconta (entra liberada, sem aprovação) ──
+  if (req.method === 'POST' && pathname === '/api/usuarios/sub') {
+    const body = await lerCorpo(req);
+    const usuario = auth.normalizarUsuario(body.usuario);
+    const nome = txt(body.nome, 60);
+    const senha = String(body.senha || '');
+    if (!auth.usuarioValido(usuario))
+      return json(res, 400, { error: 'Usuário: 3 a 24 letras, números, ponto, hífen ou _' });
+    if (!nome) return json(res, 400, { error: 'Informe o nome da pessoa' });
+    if (senha.length < auth.MIN_SENHA)
+      return json(res, 400, { error: `A senha precisa de pelo menos ${auth.MIN_SENHA} caracteres` });
+    if (usuarios.some(u => u.usuario === usuario))
+      return json(res, 409, { error: 'Esse usuário já existe' });
+
+    const nova = {
+      id: novoId('u'), usuario, nome,
+      senha: auth.hashSenha(senha),
+      papel: 'sub',
+      contaPai: eu.id,                       // de quem esta subconta depende
+      status: 'aprovado',                    // quem criou já respondeu por ela
+      criadoEm: Date.now(),
+      aprovadoEm: Date.now(), aprovadoPor: eu.usuario,
+      ultimoAcesso: null, prefs: {}
+    };
+    usuarios.push(nova);
+    await gravarUsuarios(usuarios);
+    console.log(`[contas] subconta "${usuario}" criada por "${eu.usuario}"`);
+    return json(res, 200, { ok: true, usuario: auth.usuarioPublico(nova) });
   }
 
   // ── administrador: aprovar, recusar, mudar papel, remover ──
@@ -419,7 +503,8 @@ async function api(req, res, pathname, query) {
     const body = await lerCorpo(req);
     const alvo = usuarios.find(x => x.id === txt(body.id, 40));
     if (!alvo) return json(res, 404, { error: 'Conta não encontrada' });
-    const papel = body.papel === 'admin' ? 'admin' : 'porteiro';
+    if (ehSub(alvo)) return json(res, 400, { error: 'Subconta não pode virar administrador. Crie uma conta principal.' });
+    const papel = body.papel === 'admin' ? 'admin' : 'principal';
     // não deixa o sistema ficar sem nenhum administrador
     if (alvo.papel === 'admin' && papel !== 'admin' &&
         usuarios.filter(x => x.papel === 'admin' && x.status === 'aprovado').length <= 1)
@@ -435,17 +520,22 @@ async function api(req, res, pathname, query) {
     const alvo = usuarios.find(x => x.id === id);
     if (!alvo) return json(res, 404, { error: 'Conta não encontrada' });
     if (alvo.id === eu.id) return json(res, 400, { error: 'Você não pode excluir a sua própria conta' });
+    // conta principal só mexe nas subcontas que ela mesma criou
+    if (eu.papel !== 'admin' && alvo.contaPai !== eu.id)
+      return json(res, 403, { error: 'Você só pode excluir as suas subcontas' });
     if (alvo.papel === 'admin' &&
         usuarios.filter(x => x.papel === 'admin' && x.status === 'aprovado').length <= 1)
       return json(res, 400, { error: 'Precisa sobrar pelo menos um administrador' });
-    await gravarUsuarios(usuarios.filter(x => x.id !== id));
-    console.log(`[contas] "${alvo.usuario}" removido por "${eu.usuario}"`);
-    return json(res, 200, { ok: true });
+    const orfas = ehPrincipal(alvo) ? usuarios.filter(x => x.contaPai === alvo.id) : [];
+    await gravarUsuarios(usuarios.filter(x => x.id !== id && x.contaPai !== id));
+    console.log(`[contas] "${alvo.usuario}" removido por "${eu.usuario}"` +
+      (orfas.length ? ` (junto com ${orfas.length} subconta(s))` : ''));
+    return json(res, 200, { ok: true, subcontasRemovidas: orfas.length });
   }
 
   // ── carrega tudo que o app precisa pra abrir ──
   if (req.method === 'GET' && pathname === '/api/dados') {
-    const [cadastro, pacotes] = await Promise.all([lerCadastro(), lerPacotes()]);
+    const [cadastro, pacotes] = await Promise.all([lerCadastro(esp), lerPacotes(esp)]);
     return json(res, 200, {
       cadastro, pacotes,
       envioAutomatico: whats.automatico(),
@@ -457,9 +547,27 @@ async function api(req, res, pathname, query) {
   // ── salva o cadastro (blocos, apartamentos, moradores, mensagens) ──
   if (req.method === 'POST' && pathname === '/api/cadastro') {
     const body = await lerCorpo(req);
-    const cadastro = sanearCadastro(body);
-    await store.set('cadastro', cadastro);
-    return json(res, 200, { ok: true, cadastro });
+    let cadastro = sanearCadastro(body);
+    if (ehSub(eu)) {
+      // Subconta cuida dos moradores, e só. O servidor reconstrói o prédio a partir
+      // do que já estava gravado: nome do condomínio, mensagens, blocos e
+      // apartamentos ficam como estão, venha o que vier do aplicativo.
+      const atual = await lerCadastro(esp);
+      cadastro = Object.assign({}, atual, {
+        blocos: (atual.blocos || []).map(bloco => {
+          const enviado = (cadastro.blocos || []).find(b => b.id === bloco.id);
+          return Object.assign({}, bloco, {
+            apartamentos: (bloco.apartamentos || []).map(apto => {
+              const aptoEnviado = enviado && (enviado.apartamentos || []).find(a => a.id === apto.id);
+              return aptoEnviado ? Object.assign({}, apto, { moradores: aptoEnviado.moradores }) : apto;
+            })
+          });
+        }),
+        atualizadoEm: new Date().toISOString()
+      });
+    }
+    await gravarCadastro(esp, cadastro);
+    return json(res, 200, { ok: true, cadastro, papel: eu.papel });
   }
 
   // ── bipagem: registra um ou vários códigos no apartamento escolhido ──
@@ -470,11 +578,11 @@ async function api(req, res, pathname, query) {
       .map(c => txt(c, 60).toUpperCase()).filter(Boolean).slice(0, 50);
     if (!codigos.length) return json(res, 400, { error: 'informe pelo menos um código' });
 
-    const cadastro = await lerCadastro();
+    const cadastro = await lerCadastro(esp);
     const { bloco, apto } = acharLocal(cadastro, blocoId, aptoId);
     if (!bloco || !apto) return json(res, 404, { error: 'bloco ou apartamento não encontrado' });
 
-    const lista = await lerPacotes();
+    const lista = await lerPacotes(esp);
     const agora = Date.now();
     const criados = [], repetidos = [];
     for (const codigo of codigos) {
@@ -491,7 +599,7 @@ async function api(req, res, pathname, query) {
       };
       lista.push(p); criados.push(p);
     }
-    await gravarPacotes(limpar(lista));
+    await gravarPacotes(esp, limpar(lista));
     if (criados.length) console.log(`[portaria] ${criados.length} encomenda(s) · ${bloco.nome} apto ${apto.numero}`);
     return json(res, 200, { ok: true, criados, repetidos });
   }
@@ -500,8 +608,8 @@ async function api(req, res, pathname, query) {
   if (req.method === 'POST' && pathname === '/api/avisar') {
     const body = await lerCorpo(req);
     const ids = (Array.isArray(body.ids) ? body.ids : []).map(i => txt(i, 40)).filter(Boolean);
-    const cadastro = await lerCadastro();
-    const lista = await lerPacotes();
+    const cadastro = await lerCadastro(esp);
+    const lista = await lerPacotes(esp);
     const alvo = lista.filter(p => ids.indexOf(p.id) !== -1);
     if (!alvo.length) return json(res, 400, { error: 'nenhuma encomenda selecionada' });
 
@@ -513,7 +621,7 @@ async function api(req, res, pathname, query) {
     if (enviados.some(e => e.enviado)) {
       const agora = Date.now();
       for (const p of alvo) p.avisadoEm = agora;
-      await gravarPacotes(lista);
+      await gravarPacotes(esp, lista);
     }
     return json(res, 200, {
       ok: true, enviados, automatico: whats.automatico(),
@@ -525,11 +633,11 @@ async function api(req, res, pathname, query) {
   if (req.method === 'POST' && pathname === '/api/avisado') {
     const body = await lerCorpo(req);
     const ids = (Array.isArray(body.ids) ? body.ids : []).map(i => txt(i, 40));
-    const lista = await lerPacotes();
+    const lista = await lerPacotes(esp);
     const agora = Date.now();
     let n = 0;
     for (const p of lista) if (ids.indexOf(p.id) !== -1 && !p.avisadoEm) { p.avisadoEm = agora; n++; }
-    if (n) await gravarPacotes(lista);
+    if (n) await gravarPacotes(esp, lista);
     return json(res, 200, { ok: true, marcados: n });
   }
 
@@ -539,12 +647,12 @@ async function api(req, res, pathname, query) {
     const ids = (Array.isArray(body.ids) ? body.ids : []).map(i => txt(i, 40)).filter(Boolean);
     if (!ids.length) return json(res, 400, { error: 'nenhuma encomenda selecionada' });
 
-    const lista = await lerPacotes();
+    const lista = await lerPacotes(esp);
     const alvo = lista.filter(p => ids.indexOf(p.id) !== -1 && p.status === 'pendente');
     if (!alvo.length) return json(res, 400, { error: 'encomendas já entregues ou inexistentes' });
 
-    const fotoId = await guardarImagem(body.foto, 'f', 4000000);
-    const assinaturaId = await guardarImagem(body.assinatura, 's', 2000000);
+    const fotoId = await guardarImagem(body.foto, 'f', 4000000, esp);
+    const assinaturaId = await guardarImagem(body.assinatura, 's', 2000000, esp);
 
     const agora = Date.now();
     const recebedor = txt(body.recebidoPor, 60) || 'morador';
@@ -556,11 +664,11 @@ async function api(req, res, pathname, query) {
       p.obs = txt(body.obs, 300);
       p.fotoId = fotoId; p.assinaturaId = assinaturaId;
     }
-    await gravarPacotes(limpar(lista));
+    await gravarPacotes(esp, limpar(lista));
 
     let enviados = [];
     if (body.avisar) {
-      const cadastro = await lerCadastro();
+      const cadastro = await lerCadastro(esp);
       const { bloco, apto } = acharLocal(cadastro, alvo[0].blocoId, alvo[0].aptoId);
       enviados = await avisarMoradores(apto, m =>
         textoEntrega(cadastro, m, bloco && bloco.nome, apto && apto.numero, alvo, recebedor, eu.nome));
@@ -573,7 +681,7 @@ async function api(req, res, pathname, query) {
   if (req.method === 'POST' && pathname === '/api/pacotes/remover') {
     const body = await lerCorpo(req);
     const ids = (Array.isArray(body.ids) ? body.ids : []).map(i => txt(i, 40));
-    const lista = await lerPacotes();
+    const lista = await lerPacotes(esp);
     const ficam = [];
     let n = 0;
     for (const p of lista) {
@@ -583,7 +691,7 @@ async function api(req, res, pathname, query) {
         if (p.assinaturaId) store.del('img:' + p.assinaturaId);
       } else ficam.push(p);
     }
-    if (n) await gravarPacotes(ficam);
+    if (n) await gravarPacotes(esp, ficam);
     return json(res, 200, { ok: true, removidos: n });
   }
 
@@ -591,6 +699,8 @@ async function api(req, res, pathname, query) {
   if (req.method === 'GET' && pathname === '/api/imagem') {
     const id = txt(query.get('id'), 40);
     const img = id ? await store.get('img:' + id) : null;
+    // foto de outro condomínio não é assunto de quem está pedindo
+    if (img && img.espaco && img.espaco !== esp) { res.writeHead(404); return res.end('Not found'); }
     const m = img && img.dataUrl ? /^data:([\w/+.-]+);base64,(.*)$/.exec(img.dataUrl) : null;
     if (!m) { res.writeHead(404); return res.end('Not found'); }
     const bin = Buffer.from(m[2], 'base64');
@@ -667,6 +777,9 @@ server.listen(PORT, '0.0.0.0', () => {
                 '     isso é apagado a cada restart. Configure SUPABASE_URL e SUPABASE_KEY.');
   console.log(`   whatsapp: ${whats.automatico() ? 'automático (' + whats.provedor + ')' : 'manual (link wa.me)'}`);
   if (!usandoTLS) console.log('   ⚠ sem https: senha e foto trafegam abertas fora de localhost — veja o README');
+  migrarPapeis()
+    .then(migrarEspacos)
+    .catch(e => console.error('[contas] migração:', e.message));
   lerUsuarios().then(us => {
     const admins = us.filter(u => u.papel === 'admin' && u.status === 'aprovado').length;
     const pendentes = us.filter(u => u.status === 'pendente').length;
