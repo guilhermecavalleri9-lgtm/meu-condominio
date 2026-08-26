@@ -275,6 +275,17 @@ async function api(req, res, pathname, query) {
       primeiroAcesso: usuarios.length === 0,
       exigeCodigoAdmin: usuarios.length === 0 && !!CODIGO_ADMIN,
       armazenamento: store.usandoSupabase ? 'supabase' : 'arquivo',
+      // diagnóstico: diz se cada variável chegou no processo (nunca o valor delas),
+      // pra não ficar no chute quando o Supabase não liga
+      configSupabase: store.usandoSupabase ? null : {
+        url: !!process.env.SUPABASE_URL,
+        key: !!process.env.SUPABASE_KEY,
+        urlTamanho: (process.env.SUPABASE_URL || '').trim().length,
+        keyTamanho: (process.env.SUPABASE_KEY || '').trim().length,
+        variaveisParecidas: Object.keys(process.env).filter(function (n) {
+          return /supa|SUPA/.test(n) && n !== 'SUPABASE_URL' && n !== 'SUPABASE_KEY';
+        })
+      },
       envioAutomatico: whats.automatico(),
       provedor: whats.automatico() ? whats.provedor : null
     });
