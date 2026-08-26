@@ -7,11 +7,13 @@ services:
     plan: free
     region: oregon
     buildCommand: ""            # não há dependências para instalar
+    # a versão do Node fica fixa em .node-version: deixar "engines: >=18" solto
+    # fez o Render instalar um Node 26 alpha e o build quebrar
     startCommand: node server.js
     healthCheckPath: /api/sessao
     envVars:
       - key: NODE_VERSION
-        value: "22"
+        value: "22.20.0"
       # assina as sessões; o Render gera um valor aleatório e guarda
       - key: PORTARIA_SECRET
         generateValue: true
