@@ -623,7 +623,9 @@ async function atender(req, res) {
     // um arquivo corrompido zeraria a lista de contas e abriria o cadastro de admin
     if (e.name === 'DadoIlegivel')
       return json(res, 503, { error: 'Os dados do sistema não puderam ser lidos. Nada foi apagado — restaure a cópia de segurança antes de continuar.' });
-    return json(res, 500, { error: 'erro no servidor: ' + e.message });
+    // detalhe do erro só no log do servidor: a mensagem crua já chegou a expor
+    // o valor de uma variável de ambiente na resposta pública
+    return json(res, 500, { error: 'Erro no servidor. Veja os logs para o detalhe.' });
   }
 
   // arquivos do app
