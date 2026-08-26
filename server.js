@@ -278,6 +278,7 @@ async function api(req, res, pathname, query) {
       // diagnóstico: diz se cada variável chegou no processo (nunca o valor delas),
       // pra não ficar no chute quando o Supabase não liga
       configSupabase: store.usandoSupabase ? null : {
+        problema: store.problemaConfig,
         url: !!process.env.SUPABASE_URL,
         key: !!process.env.SUPABASE_KEY,
         urlTamanho: (process.env.SUPABASE_URL || '').trim().length,
@@ -657,7 +658,8 @@ const server = usandoTLS
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🏢 Meu Condomínio na porta ${PORT} (${usandoTLS ? 'https' : 'http'})`);
-  console.log(`   dados: ${store.usandoSupabase ? 'Supabase' : store.DATA_DIR}`);
+  console.log(`   dados: ${store.usandoSupabase ? 'Supabase (tabela ' + store.TABELA + ')' : store.DATA_DIR}`);
+  if (store.problemaConfig) console.log('   ⛔ ' + store.problemaConfig);
   if (!store.usandoSupabase)
     console.log('   ⚠ os dados ficam em disco: em hospedagem que dorme ou reinicia (Render free e afins)\n' +
                 '     isso é apagado a cada restart. Configure SUPABASE_URL e SUPABASE_KEY.');
