@@ -109,6 +109,20 @@ h2:first-child{margin-top:2px}
 }
 .badge.zero{background:var(--bg3);color:var(--text3)}
 
+/* grade de blocos — mesma ideia da de apartamentos, com cartão um pouco maior */
+.grade-blocos{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+.bloco{
+  background:var(--bg2);border:1px solid var(--linha);border-radius:var(--r);
+  padding:16px 12px;text-align:center;cursor:pointer;position:relative;transition:.15s
+}
+.bloco:active{background:var(--bg3)}
+.bloco.tem{border-color:var(--accent);background:rgba(108,142,245,.08)}
+.bloco .ic{width:auto;height:auto;background:none;font-size:26px;line-height:1;display:block}
+.bloco .n{font-size:17px;font-weight:700;margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bloco .m{font-size:11.5px;color:var(--text3);margin-top:3px}
+.bloco .m b{color:var(--accent);font-weight:700}
+.bloco .bg{position:absolute;top:-7px;right:-7px}
+
 /* grade de apartamentos */
 .grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:9px}
 .apto{
@@ -814,17 +828,17 @@ function renderBlocos(){
     $('lista-blocos').innerHTML = '<div class="vazio">Nenhum bloco cadastrado ainda.<br>Toque em <b>Adicionar bloco</b> pra começar.</div>';
     return;
   }
-  $('lista-blocos').innerHTML = blocos.map(function(b){
+  $('lista-blocos').innerHTML = '<div class="grade-blocos">' + blocos.map(function(b){
     var pend = pendentesDoBloco(b.id).length;
     var aptos = (b.apartamentos||[]).length;
-    return '<div class="card" onclick="abrirBlocoTela(\'' + b.id + '\')">' +
+    return '<div class="bloco' + (pend?' tem':'') + '" onclick="abrirBlocoTela(\'' + b.id + '\')">' +
+      (pend ? '<div class="badge bg">' + pend + '</div>' : '') +
       '<div class="ic">🏢</div>' +
-      '<div class="txt"><div class="nome">' + esc(b.nome) + '</div>' +
-      '<div class="det">' + aptos + ' apartamento' + (aptos===1?'':'s') +
-        (pend ? ' · ' + pend + ' encomenda' + (pend===1?'':'s') + ' aguardando' : '') + '</div></div>' +
-      '<div class="badge' + (pend?'':' zero') + '">' + pend + '</div>' +
-      '<div class="seta">›</div></div>';
-  }).join('');
+      '<div class="n">' + esc(b.nome) + '</div>' +
+      '<div class="m">' + aptos + ' apto' + (aptos===1?'':'s') +
+        (pend ? ' · <b>' + pend + ' esperando</b>' : '') + '</div>' +
+      '</div>';
+  }).join('') + '</div>';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
